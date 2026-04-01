@@ -286,6 +286,11 @@ export default function App() {
     <div style={{padding:"1rem 0.75rem",maxWidth:680,margin:"0 auto",fontFamily:ff}}>
       {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:"#fff",border:"1px solid #ccc",borderRadius:8,padding:"10px 20px",fontSize:13,zIndex:999,color:"#222",whiteSpace:"nowrap",fontFamily:ff}}>{toast}</div>}
 
+      {/* Banner */}
+      <div style={{textAlign:"center",marginBottom:14}}>
+        <span style={{fontSize:13,color:"#444441",fontFamily:ff}}>TruPrice — Your Grocery Shopping Companion</span>
+      </div>
+
       {/* Currency bar */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,padding:"8px 12px",background:"#f9f9f9",border:"1px solid #eee",borderRadius:8}}>
         <span style={{fontSize:12,color:"#666",fontFamily:ff}}>Display:</span>
@@ -444,7 +449,7 @@ export default function App() {
                 )}
                 {shrink&&<div style={{fontSize:12,marginTop:5,color:"#b26a00",fontFamily:ff}}>⚠ Shrinkflation: {shrink}</div>}
                 {comp&&!comp.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#888",fontFamily:ff}}>💡 Cheaper: {comp.cheapestBrand} at {currSymbol}{comp.minNorm.toFixed(1)} {e.normLabel}</div>}
-                {comp?.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#1e7e34",fontFamily:ff}}>✓ Best price among brands</div>}
+                {comp?.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#1e7e34",fontFamily:ff}}>✓ Best price among stores</div>}
                 {e.note&&<div style={{fontSize:12,marginTop:4,color:"#888",fontStyle:"italic",fontFamily:ff}}>{e.note}</div>}
                 <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                   <div style={{display:"flex",gap:8}}>
