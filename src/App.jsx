@@ -117,7 +117,7 @@ export default function App() {
     });
   },[filtered]);
 
-  const inp = { padding:"7px 10px",border:"0.5px solid var(--color-border-tertiary)",borderRadius:"var(--border-radius-md)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,width:"100%",boxSizing:"border-box" };
+  const inp = { padding:"7px 10px",border:"1px solid #aaa",borderRadius:"var(--border-radius-md)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontSize:14,width:"100%",boxSizing:"border-box",fontFamily:"system-ui, -apple-system, sans-serif" };
   const lbl = (t,req) => (
     <label style={{fontSize:12,color:"var(--color-text-secondary)",display:"block",marginBottom:3}}>
       {t}{req && <span style={{color:"var(--color-text-danger)",marginLeft:2}}>*</span>}
@@ -166,7 +166,7 @@ export default function App() {
   }
 
   return (
-    <div style={{padding:"1rem 0",maxWidth:680,margin:"0 auto"}}>
+    <div style={{padding:"1rem 0",maxWidth:680,margin:"0 auto",fontFamily:"system-ui, -apple-system, sans-serif"}}>
       {toast && (
         <div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-secondary)",borderRadius:"var(--border-radius-md)",padding:"10px 20px",fontSize:13,zIndex:999,color:"var(--color-text-primary)",whiteSpace:"nowrap"}}>
           {toast}
