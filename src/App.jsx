@@ -2,17 +2,17 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 
 const UNIT_GROUPS = [
-  { label:"Weight", units:["g","kg","oz","lb"] },
-  { label:"Volume", units:["ml","L","fl oz"] },
+  { label:"Weight", units:["kg","g","lb","oz","斤(HK)","兩(HK)","斤(CN)","兩(CN)"] },
+  { label:"Volume", units:["L","ml","fl oz"] },
   { label:"Count",  units:["count"] },
 ];
-const TO_BASE = { g:1,kg:1000,oz:28.3495,lb:453.592,ml:1,L:1000,"fl oz":29.5735,count:1 };
-const UNIT_TYPE = { g:"weight",kg:"weight",oz:"weight",lb:"weight",ml:"volume",L:"volume","fl oz":"volume",count:"count" };
+const TO_BASE = { g:1,kg:1000,"斤(HK)":604.79,"兩(HK)":37.799,"斤(CN)":500,"兩(CN)":50,oz:28.3495,lb:453.592,ml:1,L:1000,"fl oz":29.5735,count:1 };
+const UNIT_TYPE = { g:"weight",kg:"weight","斤(HK)":"weight","兩(HK)":"weight","斤(CN)":"weight","兩(CN)":"weight",oz:"weight",lb:"weight",ml:"volume",L:"volume","fl oz":"volume",count:"count" };
 const BASE_LABEL = { weight:"per 100g", volume:"per 100ml", count:"per unit" };
 const COLORS = ["#378ADD","#1D9E75","#D85A30","#7F77DD","#BA7517","#D4537E","#639922","#888780"];
 const STORAGE_KEY = "price_tracker_v2";
 const today = () => new Date().toISOString().slice(0,10);
-const EMPTY = { name:"",brand:"",store:"",pricingType:"single",price:"",qty:"",unit:"g",bundleQty:"2",origPrice:"",note:"" };
+const EMPTY = { name:"",brand:"",store:"",pricingType:"single",price:"",qty:"",unit:"g",bundleQty:"2",origPrice:"",note:"",priceDate:today() };
 
 function normalizePrice(price,qty,unit,bundleQty=1) {
   const p=parseFloat(price),q=parseFloat(qty),b=parseFloat(bundleQty)||1;
@@ -96,7 +96,8 @@ export default function App() {
       price:String(e.price), qty:String(e.qty), unit:e.unit,
       bundleQty:String(e.bundleQty||2),
       origPrice:e.origPrice?String(e.origPrice):"",
-      note:e.note||""
+      note:e.note||"",
+      priceDate:e.priceDate||today()
     });
     setEditId(e.id);
     setTab("add");
@@ -108,12 +109,14 @@ export default function App() {
     if(!form.qty||!form.unit){ showToast("Quantity and unit are required."); return; }
     if(form.pricingType==="bundle"&&(!form.bundleQty||parseFloat(form.bundleQty)<2)){ showToast("Bundle requires 2 or more items."); return; }
 
+    const effectiveDate = form.priceDate || today();
     const entryData = {
       name:form.name.trim(), brand:form.brand.trim(), store:form.store.trim(),
       pricingType:form.pricingType, price:parseFloat(form.price), qty:parseFloat(form.qty), unit:form.unit,
       bundleQty:form.pricingType==="bundle"?parseFloat(form.bundleQty):1,
       origPrice:form.origPrice?parseFloat(form.origPrice):null,
-      note:form.note.trim(), date:today(),
+      note:form.note.trim(), date:effectiveDate,
+      priceDate:form.priceDate||null, createdAt:today(),
       normalized:norm?norm.normalized:null, normLabel:norm?norm.label:null,
     };
 
@@ -281,7 +284,7 @@ export default function App() {
           ) : (
             field(<>
               <div>{lbl("Sale price ($)",true)}<input style={inp} type="number" min="0" step="0.01" value={form.price} onChange={e=>setF("price",e.target.value)} placeholder="e.g. 4.99"/></div>
-              <div>{lbl("Original / pre-discount price ($)")}<input style={inp} type="number" min="0" step="0.01" value={form.origPrice} onChange={e=>setF("origPrice",e.target.value)} placeholder="e.g. 6.99 (optional)"/></div>
+              <div>{lbl("Original price ($)")}<input style={inp} type="number" min="0" step="0.01" value={form.origPrice} onChange={e=>setF("origPrice",e.target.value)} placeholder="e.g. 6.99 (optional)"/></div>
             </>,"1fr 1fr")
           )}
 
@@ -315,8 +318,14 @@ export default function App() {
 
           <div style={{marginBottom:14}}>{lbl("Note")}<input style={inp} value={form.note} onChange={e=>setF("note",e.target.value)} placeholder="Optional note"/></div>
 
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:12,color:"#888",fontFamily:ff}}>Entry date: {today()}</span>
+          {field(<>
+            <div>
+              {lbl("Price date")}
+              <input style={inp} type="date" value={form.priceDate} onChange={e=>setF("priceDate",e.target.value)}/>
+            </div>
+          </>)}
+
+          <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center"}}>
             <div style={{display:"flex",gap:8}}>
               <button onClick={handleCancel} style={{padding:"9px 20px",background:"transparent",color:"#666",border:"1px solid #aaa",borderRadius:8,fontSize:14,cursor:"pointer",fontFamily:ff}}>Cancel</button>
               <button onClick={handleSave} style={{padding:"9px 20px",background:"#444441",color:"#fff",border:"1px solid #444441",borderRadius:8,fontSize:14,cursor:"pointer",fontWeight:500,fontFamily:ff}}>{editId?"Update":"Save"}</button>
