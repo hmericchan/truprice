@@ -1,3 +1,4 @@
+// TruPrice v1.10
 import { useState, useEffect, useMemo, useRef, useCallback } from “react”;
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from “recharts”;
 
