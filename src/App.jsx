@@ -66,8 +66,8 @@ export default function App() {
   const [tab,setTab] = useState("history");
   const [form,setForm] = useState(EMPTY);
   const [editId,setEditId] = useState(null);
-  const [filterItem,setFilterItem] = useState("__all__");
   const [viewBy,setViewBy] = useState("item");
+  const [filterValue,setFilterValue] = useState("__all__");
   const [chartGroupBy,setChartGroupBy] = useState("item");
   const [toast,setToast] = useState(null);
 
@@ -79,6 +79,12 @@ export default function App() {
   const itemNames  = useMemo(()=>[...new Set(entries.map(e=>e.name))].filter(Boolean).sort(),[entries]);
   const brandNames = useMemo(()=>[...new Set(entries.map(e=>e.brand))].filter(Boolean).sort(),[entries]);
   const storeNames = useMemo(()=>[...new Set(entries.map(e=>e.store))].filter(Boolean).sort(),[entries]);
+
+  const filterOptions = useMemo(()=>{
+    if(viewBy==="brand") return brandNames;
+    if(viewBy==="store") return storeNames;
+    return itemNames;
+  },[viewBy,itemNames,brandNames,storeNames]);
 
   const norm = useMemo(()=>
     normalizePrice(form.price,form.qty,form.unit,form.pricingType==="bundle"?form.bundleQty:1),
@@ -125,13 +131,11 @@ export default function App() {
 
   function handleCancel() { setForm(EMPTY); setEditId(null); setTab("history"); }
 
-  // Shrinkflation: same item AND same brand only
   function shrinkAlert(entry) {
-    const sameBrand = entries.filter(e=>e.name===entry.name && e.brand===entry.brand)
-      .sort((a,b)=>a.date.localeCompare(b.date));
-    const idx = sameBrand.findIndex(e=>e.id===entry.id);
+    const sameBrand=entries.filter(e=>e.name===entry.name&&e.brand===entry.brand).sort((a,b)=>a.date.localeCompare(b.date));
+    const idx=sameBrand.findIndex(e=>e.id===entry.id);
     if(idx<=0) return null;
-    const prev=sameBrand[idx-1], cur=sameBrand[idx];
+    const prev=sameBrand[idx-1],cur=sameBrand[idx];
     const pt=UNIT_TYPE[prev.unit],ct=UNIT_TYPE[cur.unit];
     if(pt===ct&&pt!=="count"){
       const pb=prev.qty*(TO_BASE[prev.unit]||1),cb=cur.qty*(TO_BASE[cur.unit]||1);
@@ -140,48 +144,46 @@ export default function App() {
     return null;
   }
 
-  // Competition: same item, different brands — find lowest normalized price
   function competitionInfo(entry) {
     if(!entry.normalized) return null;
-    const sameItem = entries.filter(e=>e.name===entry.name && e.normalized);
-    const brands = [...new Set(sameItem.map(e=>e.brand||""))];
+    const sameItem=entries.filter(e=>e.name===entry.name&&e.normalized);
+    const brands=[...new Set(sameItem.map(e=>e.brand||""))];
     if(brands.length<=1) return null;
-    // latest entry per brand
-    const latestPerBrand = {};
-    sameItem.forEach(e=>{
-      const b=e.brand||"";
-      if(!latestPerBrand[b]||e.date>latestPerBrand[b].date) latestPerBrand[b]=e;
-    });
-    const prices = Object.values(latestPerBrand);
-    const minNorm = Math.min(...prices.map(e=>e.normalized));
-    const isLowest = Math.abs(entry.normalized-minNorm)<0.00001;
-    const cheapest = prices.find(e=>Math.abs(e.normalized-minNorm)<0.00001);
+    const latestPerBrand={};
+    sameItem.forEach(e=>{ const b=e.brand||""; if(!latestPerBrand[b]||e.date>latestPerBrand[b].date) latestPerBrand[b]=e; });
+    const prices=Object.values(latestPerBrand);
+    const minNorm=Math.min(...prices.map(e=>e.normalized));
+    const isLowest=Math.abs(entry.normalized-minNorm)<0.05;
+    const cheapest=prices.find(e=>Math.abs(e.normalized-minNorm)<0.05);
     return { isLowest, cheapestBrand:cheapest?.brand||"", minNorm };
   }
 
   const filtered = useMemo(()=>{
-    let list = filterItem==="__all__" ? entries : entries.filter(e=>e.name===filterItem);
-    if(viewBy==="brand") list=list.filter(e=>e.brand);
-    if(viewBy==="store") list=list.filter(e=>e.store);
+    let list=[...entries];
+    if(filterValue!=="__all__"){
+      if(viewBy==="brand") list=list.filter(e=>e.brand===filterValue);
+      else if(viewBy==="store") list=list.filter(e=>e.store===filterValue);
+      else list=list.filter(e=>e.name===filterValue);
+    }
     return [...list].sort((a,b)=>b.date.localeCompare(a.date));
-  },[entries,filterItem,viewBy]);
+  },[entries,filterValue,viewBy]);
 
-  // Group label for display
-  function groupLabel(e) {
-    if(viewBy==="brand") return e.brand||"";
-    if(viewBy==="store") return e.store||"";
-    return e.name;
-  }
-
-  // Chart data
   const chartKeys = useMemo(()=>{
-    const src = filterItem==="__all__" ? entries : entries.filter(e=>e.name===filterItem);
+    let src=filterValue==="__all__"?entries:entries.filter(e=>{
+      if(viewBy==="brand") return e.brand===filterValue;
+      if(viewBy==="store") return e.store===filterValue;
+      return e.name===filterValue;
+    });
     if(chartGroupBy==="item") return [...new Set(src.filter(e=>e.normalized).map(e=>e.name))].sort();
     return [...new Set(src.filter(e=>e.normalized&&e.brand).map(e=>e.brand))].sort();
-  },[entries,filterItem,chartGroupBy]);
+  },[entries,filterValue,viewBy,chartGroupBy]);
 
   const chartData = useMemo(()=>{
-    const src = filterItem==="__all__" ? entries : entries.filter(e=>e.name===filterItem);
+    let src=filterValue==="__all__"?entries:entries.filter(e=>{
+      if(viewBy==="brand") return e.brand===filterValue;
+      if(viewBy==="store") return e.store===filterValue;
+      return e.name===filterValue;
+    });
     const byKey={};
     src.forEach(e=>{
       if(!e.normalized) return;
@@ -194,43 +196,18 @@ export default function App() {
     const dates=[...new Set(src.map(e=>e.date))].sort();
     return dates.map(d=>{
       const row={date:d};
-      Object.keys(byKey).forEach(k=>{
-        if(byKey[k][d]) row[k]=parseFloat((byKey[k][d].reduce((a,b)=>a+b,0)/byKey[k][d].length).toFixed(4));
-      });
+      Object.keys(byKey).forEach(k=>{ if(byKey[k][d]) row[k]=parseFloat((byKey[k][d].reduce((a,b)=>a+b,0)/byKey[k][d].length).toFixed(1)); });
       return row;
     });
-  },[entries,filterItem,chartGroupBy]);
+  },[entries,filterValue,viewBy,chartGroupBy]);
 
   const ff="system-ui,-apple-system,sans-serif";
   const inp={ padding:"7px 10px",border:"1px solid #aaa",borderRadius:8,background:"#fff",color:"#222",fontSize:14,width:"100%",boxSizing:"border-box",fontFamily:ff };
-  const lbl=(t,req)=>(
-    <label style={{fontSize:12,color:"#666",display:"block",marginBottom:3,fontFamily:ff}}>
-      {t}{req&&<span style={{color:"red",marginLeft:2}}>*</span>}
-    </label>
-  );
-  const field=(children,cols)=>(
-    <div style={{display:"grid",gridTemplateColumns:cols||"1fr",gap:10,marginBottom:12}}>{children}</div>
-  );
-  const btnTab=active=>({
-    flex:1,padding:"7px 0",fontSize:13,cursor:"pointer",borderRadius:8,
-    border:active?"1px solid #444441":"1px solid #aaa",
-    background:active?"#444441":"transparent",
-    color:active?"#fff":"#666",fontFamily:ff
-  });
-  const toggleBtn=active=>({
-    padding:"5px 14px",fontSize:12,cursor:"pointer",borderRadius:6,
-    border:active?"1px solid #444441":"1px solid #aaa",
-    background:active?"#444441":"transparent",
-    color:active?"#fff":"#666",fontFamily:ff
-  });
-
-  const AnalysisIcon=()=>(
-    <svg width="14" height="14" viewBox="0 0 512 512" fill="currentColor">
-      <path d="M80 320 L180 200 L260 270 L340 140 L420 200" stroke="currentColor" strokeWidth="48" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-      <circle cx="340" cy="360" r="90" stroke="currentColor" strokeWidth="48" fill="none"/>
-      <line x1="405" y1="425" x2="460" y2="480" stroke="currentColor" strokeWidth="52" strokeLinecap="round"/>
-    </svg>
-  );
+  const lbl=(t,req)=>(<label style={{fontSize:12,color:"#666",display:"block",marginBottom:3,fontFamily:ff}}>{t}{req&&<span style={{color:"red",marginLeft:2}}>*</span>}</label>);
+  const field=(children,cols)=>(<div style={{display:"grid",gridTemplateColumns:cols||"1fr",gap:10,marginBottom:12}}>{children}</div>);
+  const btnTab=active=>({ flex:1,padding:"7px 0",fontSize:13,cursor:"pointer",borderRadius:8,border:active?"1px solid #444441":"1px solid #aaa",background:active?"#444441":"transparent",color:active?"#fff":"#666",fontFamily:ff });
+  const toggleBtn=active=>({ padding:"5px 14px",fontSize:12,cursor:"pointer",borderRadius:6,border:active?"1px solid #444441":"1px solid #aaa",background:active?"#444441":"transparent",color:active?"#fff":"#666",fontFamily:ff });
+  const AnalysisIcon=()=>(<svg width="14" height="14" viewBox="0 0 512 512" fill="currentColor"><path d="M80 320 L180 200 L260 270 L340 140 L420 200" stroke="currentColor" strokeWidth="48" strokeLinecap="round" strokeLinejoin="round" fill="none"/><circle cx="340" cy="360" r="90" stroke="currentColor" strokeWidth="48" fill="none"/><line x1="405" y1="425" x2="460" y2="480" stroke="currentColor" strokeWidth="52" strokeLinecap="round"/></svg>);
 
   function handleExport() {
     const blob=new Blob([JSON.stringify(entries,null,2)],{type:"application/json"});
@@ -293,18 +270,14 @@ export default function App() {
             <div>{lbl("Quantity",true)}<input style={inp} type="number" min="0" step="any" value={form.qty} onChange={e=>setF("qty",e.target.value)} placeholder="e.g. 500"/></div>
             <div>{lbl("Unit",true)}
               <select style={{...inp,background:"#fff",border:"1px solid #aaa",height:"36px"}} value={form.unit} onChange={e=>setF("unit",e.target.value)}>
-                {UNIT_GROUPS.map(g=>(
-                  <optgroup key={g.label} label={g.label}>
-                    {g.units.map(u=><option key={u} value={u}>{u}</option>)}
-                  </optgroup>
-                ))}
+                {UNIT_GROUPS.map(g=>(<optgroup key={g.label} label={g.label}>{g.units.map(u=><option key={u} value={u}>{u}</option>)}</optgroup>))}
               </select>
             </div>
           </>,"1fr 1fr")}
           {norm&&(
             <div style={{background:"#e8f0fe",border:"1px solid #aac4f5",borderRadius:8,padding:"9px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:12,color:"#1a73e8",fontFamily:ff}}>Normalized:</span>
-              <span style={{fontSize:16,fontWeight:500,color:"#1a73e8",fontFamily:ff}}>${norm.normalized.toFixed(4)}<span style={{fontSize:12,fontWeight:400}}> {norm.label}</span></span>
+              <span style={{fontSize:16,fontWeight:500,color:"#1a73e8",fontFamily:ff}}>${norm.normalized.toFixed(1)}<span style={{fontSize:12,fontWeight:400}}> {norm.label}</span></span>
             </div>
           )}
           {discountInfo&&(
@@ -324,29 +297,27 @@ export default function App() {
       {/* RECORD */}
       {tab==="history"&&(
         <div>
-          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
-            <label style={{fontSize:12,color:"#666",whiteSpace:"nowrap",fontFamily:ff}}>Filter:</label>
-            <select style={{...inp,width:"auto",minWidth:140,background:"#fff",border:"1px solid #aaa"}} value={filterItem} onChange={e=>setFilterItem(e.target.value)}>
-              <option value="__all__">All items</option>
-              {itemNames.map(n=><option key={n} value={n}>{n}</option>)}
-            </select>
-            {entries.length>0&&<span style={{fontSize:12,color:"#888",marginLeft:"auto",fontFamily:ff}}>{filtered.length} entries</span>}
-          </div>
-          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
             <label style={{fontSize:12,color:"#666",whiteSpace:"nowrap",fontFamily:ff}}>View by:</label>
-            <select style={{...inp,width:"auto",minWidth:140,background:"#fff",border:"1px solid #aaa"}} value={viewBy} onChange={e=>setViewBy(e.target.value)}>
+            <select style={{...inp,width:"auto",minWidth:90,background:"#fff",border:"1px solid #aaa"}} value={viewBy} onChange={e=>{setViewBy(e.target.value);setFilterValue("__all__");}}>
               <option value="item">Item</option>
               <option value="brand">Brand</option>
               <option value="store">Store</option>
             </select>
+            <label style={{fontSize:12,color:"#666",whiteSpace:"nowrap",fontFamily:ff}}>Filter:</label>
+            <select style={{...inp,width:"auto",minWidth:110,background:"#fff",border:"1px solid #aaa",flex:1}} value={filterValue} onChange={e=>setFilterValue(e.target.value)}>
+              <option value="__all__">All</option>
+              {filterOptions.map(n=><option key={n} value={n}>{n}</option>)}
+            </select>
+            {entries.length>0&&<span style={{fontSize:12,color:"#888",whiteSpace:"nowrap",fontFamily:ff}}>{filtered.length}</span>}
           </div>
+
           {filtered.length===0&&<p style={{color:"#888",fontSize:14,fontFamily:ff}}>No entries yet.</p>}
           {filtered.map(e=>{
             const shrink=shrinkAlert(e);
             const comp=competitionInfo(e);
             return (
-              <div key={e.id} style={{background: comp?.isLowest?"#f0faf4":"#fff",border:`1px solid ${comp?.isLowest?"#a8d5b5":"#ddd"}`,borderRadius:12,padding:"12px 16px",marginBottom:10}}>
-                {e.brand&&<div style={{fontSize:11,color:"#999",fontFamily:ff,marginBottom:2}}>Brand: {e.brand}</div>}
+              <div key={e.id} style={{background:comp?.isLowest?"#f0faf4":"#fff",border:`1px solid ${comp?.isLowest?"#a8d5b5":"#ddd"}`,borderRadius:12,padding:"12px 16px",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
                   <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{e.name}</span>
                   <span style={{fontSize:12,color:"#888",fontFamily:ff,whiteSpace:"nowrap"}}>{e.date}</span>
@@ -396,11 +367,17 @@ export default function App() {
       {/* ANALYSIS */}
       {tab==="chart"&&(
         <div>
-          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+            <label style={{fontSize:12,color:"#666",whiteSpace:"nowrap",fontFamily:ff}}>View by:</label>
+            <select style={{...inp,width:"auto",minWidth:90,background:"#fff",border:"1px solid #aaa"}} value={viewBy} onChange={e=>{setViewBy(e.target.value);setFilterValue("__all__");}}>
+              <option value="item">Item</option>
+              <option value="brand">Brand</option>
+              <option value="store">Store</option>
+            </select>
             <label style={{fontSize:12,color:"#666",whiteSpace:"nowrap",fontFamily:ff}}>Filter:</label>
-            <select style={{...inp,width:"auto",minWidth:160,background:"#fff",border:"1px solid #aaa"}} value={filterItem} onChange={e=>setFilterItem(e.target.value)}>
-              <option value="__all__">All items</option>
-              {itemNames.map(n=><option key={n} value={n}>{n}</option>)}
+            <select style={{...inp,width:"auto",minWidth:110,background:"#fff",border:"1px solid #aaa",flex:1}} value={filterValue} onChange={e=>setFilterValue(e.target.value)}>
+              <option value="__all__">All</option>
+              {filterOptions.map(n=><option key={n} value={n}>{n}</option>)}
             </select>
           </div>
           <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center"}}>
@@ -412,21 +389,15 @@ export default function App() {
             ? <p style={{color:"#888",fontSize:14,fontFamily:ff}}>No data to display.</p>
             : <div style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"1rem"}}>
                 <div style={{display:"flex",flexWrap:"wrap",gap:12,marginBottom:12}}>
-                  {chartKeys.map((k,i)=>(
-                    <span key={k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:"#666",fontFamily:ff}}>
-                      <span style={{width:10,height:10,borderRadius:2,background:COLORS[i%COLORS.length],display:"inline-block"}}></span>{k}
-                    </span>
-                  ))}
+                  {chartKeys.map((k,i)=>(<span key={k} style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:"#666",fontFamily:ff}}><span style={{width:10,height:10,borderRadius:2,background:COLORS[i%COLORS.length],display:"inline-block"}}></span>{k}</span>))}
                 </div>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={chartData} margin={{top:5,right:10,left:0,bottom:5}}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)"/>
                     <XAxis dataKey="date" tick={{fontSize:11,fontFamily:ff}}/>
-                    <YAxis tick={{fontSize:11,fontFamily:ff}} tickFormatter={v=>`$${v.toFixed(3)}`} width={62}/>
-                    <Tooltip formatter={(v,name)=>[`$${parseFloat(v).toFixed(4)}`,name]} contentStyle={{fontSize:12,borderRadius:8,border:"1px solid #aaa",fontFamily:ff}}/>
-                    {chartKeys.map((k,i)=>(
-                      <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i%COLORS.length]} strokeWidth={2} dot={{r:4}} activeDot={{r:6}} connectNulls={false}/>
-                    ))}
+                    <YAxis tick={{fontSize:11,fontFamily:ff}} tickFormatter={v=>`$${v.toFixed(1)}`} width={55}/>
+                    <Tooltip formatter={(v,name)=>[`$${parseFloat(v).toFixed(1)}`,name]} contentStyle={{fontSize:12,borderRadius:8,border:"1px solid #aaa",fontFamily:ff}}/>
+                    {chartKeys.map((k,i)=>(<Line key={k} type="monotone" dataKey={k} stroke={COLORS[i%COLORS.length]} strokeWidth={2} dot={{r:4}} activeDot={{r:6}} connectNulls={false}/>))}
                   </LineChart>
                 </ResponsiveContainer>
                 <p style={{fontSize:11,color:"#888",marginTop:8,textAlign:"center",fontFamily:ff}}>Normalized price over time</p>
