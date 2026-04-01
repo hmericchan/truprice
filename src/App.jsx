@@ -320,21 +320,21 @@ return (
     <span style={{fontSize:13,color:"#444441",fontFamily:ff}}>TruPrice — Your Grocery Shopping Companion</span>
   </div>
 
-  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,padding:"8px 12px",background:"#f9f9f9",border:"1px solid #eee",borderRadius:8}}>
-    <span style={{fontSize:12,color:"#666",fontFamily:ff}}>Display:</span>
-    {CURRENCIES.map(c=>(<button key={c} onClick={()=>setDisplayCurrency(c)} style={{...toggleBtn(displayCurrency===c),padding:"4px 10px",fontSize:12}}>{c}</button>))}
-    <button onClick={fetchFx} disabled={fxLoading} style={{marginLeft:"auto",fontSize:11,padding:"4px 10px",borderRadius:6,border:"1px solid #aaa",background:"transparent",color:"#666",cursor:"pointer",fontFamily:ff}}>{fxLoading?"…":"⟳ Rates"}</button>
-    {fxUpdatedLabel&&<span style={{fontSize:10,color:"#aaa",fontFamily:ff}}>{fxUpdatedLabel}</span>}
-  </div>
-  {fxError&&<div style={{fontSize:12,color:"#c0392b",marginBottom:10,fontFamily:ff}}>{fxError}</div>}
-
-  <div style={{display:"flex",gap:8,marginBottom:20}}>
+  <div style={{display:"flex",gap:8,marginBottom:14}}>
     {[{key:"history",label:"Record"},{key:"add",label:editId?"Edit":"+ New"},{key:"chart",label:"chart"}].map(({key,label})=>(
       <button key={key} onClick={()=>setTab(key)} style={btnTab(tab===key)}>
         {key==="chart"?<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:6}}><AnalysisIcon/>Analysis</span>:label}
       </button>
     ))}
   </div>
+
+  {tab!=="add" && <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,padding:"8px 12px",background:"#f9f9f9",border:"1px solid #eee",borderRadius:8}}>
+    <span style={{fontSize:12,color:"#666",fontFamily:ff}}>Display:</span>
+    {CURRENCIES.map(c=>(<button key={c} onClick={()=>setDisplayCurrency(c)} style={{...toggleBtn(displayCurrency===c),padding:"4px 10px",fontSize:12}}>{c}</button>))}
+    <button onClick={fetchFx} disabled={fxLoading} style={{marginLeft:"auto",fontSize:11,padding:"4px 10px",borderRadius:6,border:"1px solid #aaa",background:"transparent",color:"#666",cursor:"pointer",fontFamily:ff}}>{fxLoading?"…":"⟳ Rates"}</button>
+    {fxUpdatedLabel&&<span style={{fontSize:10,color:"#aaa",fontFamily:ff}}>{fxUpdatedLabel}</span>}
+  </div>}
+  {fxError&&tab!=="add"&&<div style={{fontSize:12,color:"#c0392b",marginBottom:10,fontFamily:ff}}>{fxError}</div>}
 
   {/* ADD / EDIT */}
   {tab==="add"&&(
