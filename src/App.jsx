@@ -103,6 +103,20 @@ export default function App() {
     setTab("add");
   }
 
+  function handleDuplicate(e) {
+    setForm({
+      name:e.name, brand:e.brand||"", store:e.store||"",
+      pricingType:e.pricingType||"single",
+      price:String(e.price), qty:String(e.qty), unit:e.unit,
+      bundleQty:String(e.bundleQty||2),
+      origPrice:e.origPrice?String(e.origPrice):"",
+      note:e.note||"",
+      priceDate:today()
+    });
+    setEditId(null);
+    setTab("add");
+  }
+
   function handleSave() {
     if(!form.name.trim()){ showToast("Item name is required."); return; }
     if(!form.price){ showToast("Sale price is required."); return; }
@@ -351,10 +365,8 @@ export default function App() {
           {[...filtered].reverse().map(e=>{
             const alert=shrinkAlert(e.name);
             return (
-              <div key={e.id} onClick={()=>handleEdit(e)}
-                style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"12px 16px",marginBottom:10,cursor:"pointer"}}
-                onMouseEnter={el=>el.currentTarget.style.borderColor="#aaa"}
-                onMouseLeave={el=>el.currentTarget.style.borderColor="#ddd"}>
+              <div key={e.id}
+                style={{background:"#fff",border:"1px solid #ddd",borderRadius:12,padding:"12px 16px",marginBottom:10}}>
 
                 {/* Brand row */}
                 {e.brand && <div style={{fontSize:11,color:"#999",fontFamily:ff,marginBottom:2}}>Brand: {e.brand}</div>}
@@ -386,10 +398,13 @@ export default function App() {
                 {alert&&<div style={{fontSize:12,marginTop:5,color:"#b26a00",fontFamily:ff}}>⚠ Shrinkflation: {alert}</div>}
                 {e.note&&<div style={{fontSize:12,marginTop:4,color:"#888",fontStyle:"italic",fontFamily:ff}}>{e.note}</div>}
 
-                <div style={{marginTop:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:11,color:"#bbb",fontFamily:ff}}>Tap to edit</span>
-                  <button onClick={ev=>{ev.stopPropagation();setEntries(prev=>prev.filter(x=>x.id!==e.id));}}
-                    style={{fontSize:11,padding:"3px 10px",border:"1px solid #ddd",borderRadius:6,background:"transparent",color:"#aaa",cursor:"pointer",fontFamily:ff}}>Delete</button>
+                <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>handleEdit(e)} style={{fontSize:12,padding:"5px 14px",border:"1px solid #aaa",borderRadius:6,background:"transparent",color:"#444",cursor:"pointer",fontFamily:ff}}>Edit</button>
+                    <button onClick={()=>handleDuplicate(e)} style={{fontSize:12,padding:"5px 14px",border:"1px solid #aaa",borderRadius:6,background:"transparent",color:"#444",cursor:"pointer",fontFamily:ff}}>Duplicate</button>
+                  </div>
+                  <button onClick={()=>setEntries(prev=>prev.filter(x=>x.id!==e.id))}
+                    style={{fontSize:12,padding:"5px 14px",border:"1px solid #ddd",borderRadius:6,background:"transparent",color:"#aaa",cursor:"pointer",fontFamily:ff}}>Delete</button>
                 </div>
               </div>
             );
