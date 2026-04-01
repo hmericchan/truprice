@@ -20,7 +20,8 @@ function normalizePrice(price,qty,unit,bundleQty=1) {
   const totalBase=q*(TO_BASE[unit]||1);
   const type=UNIT_TYPE[unit];
   const divisor=type==="count"?1:100;
-  return { normalized:(p/b/totalBase)*divisor, label:BASE_LABEL[type], type };
+  const normalized=parseFloat(((p/b/totalBase)*divisor).toFixed(1));
+  return { normalized, label:BASE_LABEL[type], type };
 }
 
 const load = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY))||[]; } catch { return []; } };
@@ -66,6 +67,7 @@ export default function App() {
   const [form,setForm] = useState(EMPTY);
   const [editId,setEditId] = useState(null);
   const [filterItem,setFilterItem] = useState("__all__");
+  const [viewBy,setViewBy] = useState("item");
   const [chartGroupBy,setChartGroupBy] = useState("item");
   const [toast,setToast] = useState(null);
 
@@ -158,9 +160,18 @@ export default function App() {
   }
 
   const filtered = useMemo(()=>{
-    const list=filterItem==="__all__"?entries:entries.filter(e=>e.name===filterItem);
+    let list = filterItem==="__all__" ? entries : entries.filter(e=>e.name===filterItem);
+    if(viewBy==="brand") list=list.filter(e=>e.brand);
+    if(viewBy==="store") list=list.filter(e=>e.store);
     return [...list].sort((a,b)=>b.date.localeCompare(a.date));
-  },[entries,filterItem]);
+  },[entries,filterItem,viewBy]);
+
+  // Group label for display
+  function groupLabel(e) {
+    if(viewBy==="brand") return e.brand||"";
+    if(viewBy==="store") return e.store||"";
+    return e.name;
+  }
 
   // Chart data
   const chartKeys = useMemo(()=>{
@@ -281,7 +292,7 @@ export default function App() {
           {field(<>
             <div>{lbl("Quantity",true)}<input style={inp} type="number" min="0" step="any" value={form.qty} onChange={e=>setF("qty",e.target.value)} placeholder="e.g. 500"/></div>
             <div>{lbl("Unit",true)}
-              <select style={{...inp,background:"#fff",border:"1px solid #aaa"}} value={form.unit} onChange={e=>setF("unit",e.target.value)}>
+              <select style={{...inp,background:"#fff",border:"1px solid #aaa",height:"36px"}} value={form.unit} onChange={e=>setF("unit",e.target.value)}>
                 {UNIT_GROUPS.map(g=>(
                   <optgroup key={g.label} label={g.label}>
                     {g.units.map(u=><option key={u} value={u}>{u}</option>)}
@@ -313,13 +324,21 @@ export default function App() {
       {/* RECORD */}
       {tab==="history"&&(
         <div>
-          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
             <label style={{fontSize:12,color:"#666",whiteSpace:"nowrap",fontFamily:ff}}>Filter:</label>
-            <select style={{...inp,width:"auto",minWidth:160,background:"#fff",border:"1px solid #aaa"}} value={filterItem} onChange={e=>setFilterItem(e.target.value)}>
+            <select style={{...inp,width:"auto",minWidth:140,background:"#fff",border:"1px solid #aaa"}} value={filterItem} onChange={e=>setFilterItem(e.target.value)}>
               <option value="__all__">All items</option>
               {itemNames.map(n=><option key={n} value={n}>{n}</option>)}
             </select>
             {entries.length>0&&<span style={{fontSize:12,color:"#888",marginLeft:"auto",fontFamily:ff}}>{filtered.length} entries</span>}
+          </div>
+          <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14}}>
+            <label style={{fontSize:12,color:"#666",whiteSpace:"nowrap",fontFamily:ff}}>View by:</label>
+            <select style={{...inp,width:"auto",minWidth:140,background:"#fff",border:"1px solid #aaa"}} value={viewBy} onChange={e=>setViewBy(e.target.value)}>
+              <option value="item">Item</option>
+              <option value="brand">Brand</option>
+              <option value="store">Store</option>
+            </select>
           </div>
           {filtered.length===0&&<p style={{color:"#888",fontSize:14,fontFamily:ff}}>No entries yet.</p>}
           {filtered.map(e=>{
@@ -332,12 +351,17 @@ export default function App() {
                   <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{e.name}</span>
                   <span style={{fontSize:12,color:"#888",fontFamily:ff,whiteSpace:"nowrap"}}>{e.date}</span>
                 </div>
-                {e.store&&<div style={{fontSize:11,color:"#999",fontFamily:ff,marginTop:2}}>Store: {e.store}</div>}
+                {(e.store||e.brand)&&(
+                  <div style={{fontSize:11,color:"#999",fontFamily:ff,marginTop:2,display:"flex",gap:12}}>
+                    {e.store&&<span>Store: {e.store}</span>}
+                    {e.brand&&<span>Brand: {e.brand}</span>}
+                  </div>
+                )}
                 {e.pricingType==="bundle"&&<span style={{fontSize:11,padding:"2px 7px",borderRadius:6,background:"#fff8e1",color:"#b26a00",fontFamily:ff,display:"inline-block",marginTop:4}}>bundle ×{e.bundleQty}</span>}
                 <div style={{display:"flex",gap:16,marginTop:6,flexWrap:"wrap",fontSize:13,fontFamily:ff}}>
                   <span><span style={{color:"#888"}}>Paid: </span>${e.price.toFixed(2)}</span>
                   <span><span style={{color:"#888"}}>Qty: </span>{e.qty}{e.unit}</span>
-                  {e.normalized&&<span style={{color:"#1a73e8",fontWeight:500}}>${e.normalized.toFixed(4)} {e.normLabel}</span>}
+                  {e.normalized&&<span style={{color:"#1a73e8",fontWeight:500}}>${e.normalized.toFixed(1)} {e.normLabel}</span>}
                 </div>
                 {e.origPrice&&(
                   <div style={{fontSize:12,marginTop:5,color:e.price>e.origPrice?"#c0392b":"#888",fontFamily:ff}}>
@@ -347,7 +371,7 @@ export default function App() {
                   </div>
                 )}
                 {shrink&&<div style={{fontSize:12,marginTop:5,color:"#b26a00",fontFamily:ff}}>⚠ Shrinkflation: {shrink}</div>}
-                {comp&&!comp.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#888",fontFamily:ff}}>💡 Cheaper option: {comp.cheapestBrand} at ${comp.minNorm.toFixed(4)} {e.normLabel}</div>}
+                {comp&&!comp.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#888",fontFamily:ff}}>💡 Cheaper: {comp.cheapestBrand} at ${comp.minNorm.toFixed(1)} {e.normLabel}</div>}
                 {comp?.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#1e7e34",fontFamily:ff}}>✓ Best price among brands</div>}
                 {e.note&&<div style={{fontSize:12,marginTop:4,color:"#888",fontStyle:"italic",fontFamily:ff}}>{e.note}</div>}
                 <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
