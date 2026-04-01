@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 
 const UNIT_GROUPS = [
@@ -11,8 +11,12 @@ const UNIT_TYPE = { g:"weight",kg:"weight",lb:"weight",oz:"weight","斤(HK)":"we
 const BASE_LABEL = { weight:"per 100g", volume:"per 100ml", count:"per unit" };
 const COLORS = ["#378ADD","#1D9E75","#D85A30","#7F77DD","#BA7517","#D4537E","#639922","#888780"];
 const STORAGE_KEY = "price_tracker_v2";
+const FX_CACHE_KEY = "truprice_fx_cache";
+const CURRENCIES = ["HKD","USD","CAD"];
+const CURRENCY_SYMBOLS = { HKD:"HK$", USD:"US$", CAD:"CA$" };
+
 const today = () => new Date().toISOString().slice(0,10);
-const EMPTY = { name:"",brand:"",store:"",pricingType:"single",price:"",qty:"",unit:"g",bundleQty:"2",origPrice:"",note:"",priceDate:today() };
+const EMPTY = { name:"",brand:"",store:"",pricingType:"single",price:"",qty:"",unit:"g",bundleQty:"2",origPrice:"",note:"",priceDate:today(),currency:"HKD" };
 
 function normalizePrice(price,qty,unit,bundleQty=1) {
   const p=parseFloat(price),q=parseFloat(qty),b=parseFloat(bundleQty)||1;
@@ -26,6 +30,8 @@ function normalizePrice(price,qty,unit,bundleQty=1) {
 
 const load = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY))||[]; } catch { return []; } };
 const save = d => { try { localStorage.setItem(STORAGE_KEY,JSON.stringify(d)); } catch {} };
+const loadFxCache = () => { try { return JSON.parse(localStorage.getItem(FX_CACHE_KEY))||null; } catch { return null; } };
+const saveFxCache = d => { try { localStorage.setItem(FX_CACHE_KEY,JSON.stringify(d)); } catch {} };
 
 function AutocompleteInput({ value, onChange, suggestions, placeholder, style }) {
   const [open,setOpen] = useState(false);
@@ -43,17 +49,14 @@ function AutocompleteInput({ value, onChange, suggestions, placeholder, style })
     <div style={{position:"relative"}} ref={ref}>
       <input style={style} value={value}
         onChange={e=>{onChange(e.target.value);setOpen(true);}}
-        onFocus={()=>setOpen(true)}
-        placeholder={placeholder}/>
+        onFocus={()=>setOpen(true)} placeholder={placeholder}/>
       {open&&filtered.length>0&&(
         <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:"#fff",border:"1px solid #ccc",borderRadius:8,maxHeight:160,overflowY:"auto",marginTop:2}}>
           {filtered.map(s=>(
             <div key={s} onMouseDown={()=>{onChange(s);setOpen(false);}}
               style={{padding:"8px 12px",fontSize:13,cursor:"pointer",color:"#333",fontFamily:"system-ui,-apple-system,sans-serif"}}
               onMouseEnter={e=>e.currentTarget.style.background="#f5f5f5"}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              {s}
-            </div>
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{s}</div>
           ))}
         </div>
       )}
@@ -69,9 +72,48 @@ export default function App() {
   const [viewBy,setViewBy] = useState("item");
   const [filterValue,setFilterValue] = useState("__all__");
   const [chartGroupBy,setChartGroupBy] = useState("item");
+  const [displayCurrency,setDisplayCurrency] = useState("HKD");
+  const [fxRates,setFxRates] = useState(null); // rates relative to HKD
+  const [fxUpdated,setFxUpdated] = useState(null);
+  const [fxLoading,setFxLoading] = useState(false);
+  const [fxError,setFxError] = useState(null);
   const [toast,setToast] = useState(null);
 
   useEffect(()=>{ save(entries); },[entries]);
+
+  // Load cached FX on mount
+  useEffect(()=>{
+    const cache=loadFxCache();
+    if(cache){ setFxRates(cache.rates); setFxUpdated(cache.updated); }
+    else fetchFx();
+  },[]);
+
+  const fetchFx = useCallback(async()=>{
+    setFxLoading(true); setFxError(null);
+    try {
+      const res = await fetch("https://api.frankfurter.app/latest?from=HKD&to=USD,CAD");
+      if(!res.ok) throw new Error("Network error");
+      const data = await res.json();
+      // data.rates = { USD: x, CAD: y } meaning 1 HKD = x USD
+      const rates = { HKD:1, ...data.rates };
+      const updated = new Date().toISOString();
+      setFxRates(rates); setFxUpdated(updated);
+      saveFxCache({ rates, updated });
+    } catch(e) {
+      setFxError("Could not fetch rates. Using cached or 1:1.");
+    } finally { setFxLoading(false); }
+  },[]);
+
+  // Convert a price from its original currency to displayCurrency
+  function convertPrice(price, fromCurrency) {
+    if(!fxRates||!fromCurrency||fromCurrency===displayCurrency) return price;
+    // Convert to HKD first, then to displayCurrency
+    const toHKD = fromCurrency==="HKD" ? price : price / (fxRates[fromCurrency]||1);
+    const toDisplay = displayCurrency==="HKD" ? toHKD : toHKD * (fxRates[displayCurrency]||1);
+    return toDisplay;
+  }
+
+  const currSymbol = CURRENCY_SYMBOLS[displayCurrency]||displayCurrency;
 
   const setF=(k,v)=>setForm(f=>({...f,[k]:v}));
   const showToast=msg=>{ setToast(msg); setTimeout(()=>setToast(null),3000); };
@@ -99,14 +141,16 @@ export default function App() {
   function handleEdit(e) {
     setForm({ name:e.name,brand:e.brand||"",store:e.store||"",pricingType:e.pricingType||"single",
       price:String(e.price),qty:String(e.qty),unit:e.unit,bundleQty:String(e.bundleQty||2),
-      origPrice:e.origPrice?String(e.origPrice):"",note:e.note||"",priceDate:e.priceDate||today() });
+      origPrice:e.origPrice?String(e.origPrice):"",note:e.note||"",
+      priceDate:e.priceDate||today(),currency:e.currency||"HKD" });
     setEditId(e.id); setTab("add");
   }
 
   function handleDuplicate(e) {
     setForm({ name:e.name,brand:e.brand||"",store:e.store||"",pricingType:e.pricingType||"single",
       price:String(e.price),qty:String(e.qty),unit:e.unit,bundleQty:String(e.bundleQty||2),
-      origPrice:e.origPrice?String(e.origPrice):"",note:e.note||"",priceDate:today() });
+      origPrice:e.origPrice?String(e.origPrice):"",note:e.note||"",
+      priceDate:today(),currency:e.currency||"HKD" });
     setEditId(null); setTab("add");
   }
 
@@ -122,6 +166,7 @@ export default function App() {
       bundleQty:form.pricingType==="bundle"?parseFloat(form.bundleQty):1,
       origPrice:form.origPrice?parseFloat(form.origPrice):null,
       note:form.note.trim(),date:effectiveDate,priceDate:form.priceDate||null,createdAt:today(),
+      currency:form.currency||"HKD",
       normalized:norm?norm.normalized:null,normLabel:norm?norm.label:null,
     };
     if(editId){ setEntries(prev=>prev.map(e=>e.id===editId?{...entryData,id:editId}:e)); showToast("Record updated!"); setEditId(null); }
@@ -152,9 +197,23 @@ export default function App() {
     const latestPerBrand={};
     sameItem.forEach(e=>{ const b=e.brand||""; if(!latestPerBrand[b]||e.date>latestPerBrand[b].date) latestPerBrand[b]=e; });
     const prices=Object.values(latestPerBrand);
-    const minNorm=Math.min(...prices.map(e=>e.normalized));
-    const isLowest=Math.abs(entry.normalized-minNorm)<0.05;
-    const cheapest=prices.find(e=>Math.abs(e.normalized-minNorm)<0.05);
+    // Normalize everything to HKD first as common base, then convert to display currency
+    const toHKD = (norm, curr) => {
+      if(!fxRates||curr==="HKD") return norm;
+      return norm / (fxRates[curr]||1);
+    };
+    const toDisplay = (hkd) => {
+      if(!fxRates||displayCurrency==="HKD") return hkd;
+      return hkd * (fxRates[displayCurrency]||1);
+    };
+    const converted=prices.map(e=>({
+      ...e,
+      dispNorm: parseFloat(toDisplay(toHKD(e.normalized, e.currency||"HKD")).toFixed(1))
+    }));
+    const minNorm=Math.min(...converted.map(e=>e.dispNorm));
+    const myDispNorm=parseFloat(toDisplay(toHKD(entry.normalized,entry.currency||"HKD")).toFixed(1));
+    const isLowest=Math.abs(myDispNorm-minNorm)<0.05;
+    const cheapest=converted.find(e=>Math.abs(e.dispNorm-minNorm)<0.05);
     return { isLowest, cheapestBrand:cheapest?.brand||"", minNorm };
   }
 
@@ -189,9 +248,10 @@ export default function App() {
       if(!e.normalized) return;
       const k=chartGroupBy==="item"?e.name:(e.brand||"");
       if(!k) return;
+      const converted=parseFloat(convertPrice(e.normalized,e.currency||"HKD").toFixed(1));
       if(!byKey[k]) byKey[k]={};
       if(!byKey[k][e.date]) byKey[k][e.date]=[];
-      byKey[k][e.date].push(e.normalized);
+      byKey[k][e.date].push(converted);
     });
     const dates=[...new Set(src.map(e=>e.date))].sort();
     return dates.map(d=>{
@@ -199,7 +259,7 @@ export default function App() {
       Object.keys(byKey).forEach(k=>{ if(byKey[k][d]) row[k]=parseFloat((byKey[k][d].reduce((a,b)=>a+b,0)/byKey[k][d].length).toFixed(1)); });
       return row;
     });
-  },[entries,filterValue,viewBy,chartGroupBy]);
+  },[entries,filterValue,viewBy,chartGroupBy,fxRates,displayCurrency]);
 
   const ff="system-ui,-apple-system,sans-serif";
   const inp={ padding:"7px 10px",border:"1px solid #aaa",borderRadius:8,background:"#fff",color:"#222",fontSize:14,width:"100%",boxSizing:"border-box",fontFamily:ff };
@@ -220,9 +280,24 @@ export default function App() {
     r.readAsText(file); e.target.value="";
   }
 
+  const fxUpdatedLabel = fxUpdated ? new Date(fxUpdated).toLocaleDateString() : null;
+
   return (
     <div style={{padding:"1rem 0.75rem",maxWidth:680,margin:"0 auto",fontFamily:ff}}>
       {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:"#fff",border:"1px solid #ccc",borderRadius:8,padding:"10px 20px",fontSize:13,zIndex:999,color:"#222",whiteSpace:"nowrap",fontFamily:ff}}>{toast}</div>}
+
+      {/* Currency bar */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,padding:"8px 12px",background:"#f9f9f9",border:"1px solid #eee",borderRadius:8}}>
+        <span style={{fontSize:12,color:"#666",fontFamily:ff}}>Display:</span>
+        {CURRENCIES.map(c=>(
+          <button key={c} onClick={()=>setDisplayCurrency(c)} style={{...toggleBtn(displayCurrency===c),padding:"4px 10px",fontSize:12}}>{c}</button>
+        ))}
+        <button onClick={fetchFx} disabled={fxLoading} style={{marginLeft:"auto",fontSize:11,padding:"4px 10px",borderRadius:6,border:"1px solid #aaa",background:"transparent",color:"#666",cursor:"pointer",fontFamily:ff}}>
+          {fxLoading?"…":"⟳ Rates"}
+        </button>
+        {fxUpdatedLabel&&<span style={{fontSize:10,color:"#aaa",fontFamily:ff}}>{fxUpdatedLabel}</span>}
+      </div>
+      {fxError&&<div style={{fontSize:12,color:"#c0392b",marginBottom:10,fontFamily:ff}}>{fxError}</div>}
 
       <div style={{display:"flex",gap:8,marginBottom:20}}>
         {[{key:"history",label:"Record"},{key:"add",label:editId?"Edit":"+ New"},{key:"chart",label:"chart"}].map(({key,label})=>(
@@ -255,14 +330,24 @@ export default function App() {
           {form.pricingType==="bundle"?(
             <div style={{background:"#f9f9f9",border:"1px solid #ddd",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
               {field(<>
-                <div>{lbl("Total bundle price ($)",true)}<input style={inp} type="number" min="0" step="0.01" value={form.price} onChange={e=>setF("price",e.target.value)} placeholder="e.g. 9.99"/></div>
+                <div>{lbl("Total bundle price",true)}
+                  <div style={{display:"flex",gap:6}}>
+                    <input style={{...inp,flex:1}} type="number" min="0" step="0.01" value={form.price} onChange={e=>setF("price",e.target.value)} placeholder="e.g. 9.99"/>
+                    <select style={{...inp,width:80}} value={form.currency} onChange={e=>setF("currency",e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                  </div>
+                </div>
                 <div>{lbl("Items in bundle",true)}<input style={inp} type="number" min="2" step="1" value={form.bundleQty} onChange={e=>setF("bundleQty",e.target.value)} placeholder="e.g. 2"/></div>
               </>,"1fr 1fr")}
-              {form.price&&form.bundleQty&&<p style={{fontSize:12,color:"#666",margin:"4px 0 0",fontFamily:ff}}>Price per item: ${(parseFloat(form.price)/parseFloat(form.bundleQty)).toFixed(2)}</p>}
+              {form.price&&form.bundleQty&&<p style={{fontSize:12,color:"#666",margin:"4px 0 0",fontFamily:ff}}>Price per item: {CURRENCY_SYMBOLS[form.currency]||form.currency}{(parseFloat(form.price)/parseFloat(form.bundleQty)).toFixed(2)}</p>}
             </div>
           ):(
             field(<>
-              <div>{lbl("Sale price ($)",true)}<input style={inp} type="number" min="0" step="0.01" value={form.price} onChange={e=>setF("price",e.target.value)} placeholder="e.g. 4.99"/></div>
+              <div>{lbl("Sale price",true)}
+                <div style={{display:"flex",gap:6}}>
+                  <input style={{...inp,flex:1}} type="number" min="0" step="0.01" value={form.price} onChange={e=>setF("price",e.target.value)} placeholder="e.g. 4.99"/>
+                  <select style={{...inp,width:80}} value={form.currency} onChange={e=>setF("currency",e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                </div>
+              </div>
               <div>{lbl("Original price ($)")}<input style={inp} type="number" min="0" step="0.01" value={form.origPrice} onChange={e=>setF("origPrice",e.target.value)} placeholder="e.g. 6.99 (optional)"/></div>
             </>,"1fr 1fr")
           )}
@@ -275,14 +360,21 @@ export default function App() {
             </div>
           </>,"1fr 1fr")}
           {norm&&(
-            <div style={{background:"#e8f0fe",border:"1px solid #aac4f5",borderRadius:8,padding:"9px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:12,color:"#1a73e8",fontFamily:ff}}>Normalized:</span>
-              <span style={{fontSize:16,fontWeight:500,color:"#1a73e8",fontFamily:ff}}>${norm.normalized.toFixed(1)}<span style={{fontSize:12,fontWeight:400}}> {norm.label}</span></span>
+            <div style={{background:"#e8f0fe",border:"1px solid #aac4f5",borderRadius:8,padding:"9px 14px",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:12,color:"#1a73e8",fontFamily:ff}}>Normalized ({form.currency}):</span>
+                <span style={{fontSize:16,fontWeight:500,color:"#1a73e8",fontFamily:ff}}>{CURRENCY_SYMBOLS[form.currency]||form.currency}{norm.normalized.toFixed(1)}<span style={{fontSize:12,fontWeight:400}}> {norm.label}</span></span>
+              </div>
+              {form.currency!==displayCurrency&&fxRates&&(
+                <div style={{fontSize:12,color:"#555",marginTop:4,fontFamily:ff}}>
+                  ≈ {currSymbol}{convertPrice(norm.normalized,form.currency).toFixed(1)} {norm.label} ({displayCurrency})
+                </div>
+              )}
             </div>
           )}
           {discountInfo&&(
             <div style={{background:discountInfo.isHigher?"#fdecea":"#e6f4ea",border:"1px solid",borderColor:discountInfo.isHigher?"#f5c6c6":"#a8d5b5",borderRadius:8,padding:"8px 12px",fontSize:13,color:discountInfo.isHigher?"#c0392b":"#1e7e34",marginBottom:12,fontFamily:ff}}>
-              {discountInfo.isHigher?`Current price ($${form.price}) is HIGHER than the original ($${form.origPrice})!`:`Actual discount: ${discountInfo.advertised}% off (original $${form.origPrice})`}
+              {discountInfo.isHigher?`Current price is HIGHER than the original!`:`Actual discount: ${discountInfo.advertised}% off`}
             </div>
           )}
           <div style={{marginBottom:12}}>{lbl("Note")}<input style={inp} value={form.note} onChange={e=>setF("note",e.target.value)} placeholder="Optional note"/></div>
@@ -316,6 +408,10 @@ export default function App() {
           {filtered.map(e=>{
             const shrink=shrinkAlert(e);
             const comp=competitionInfo(e);
+            const entryCurr=e.currency||"HKD";
+            const entrySymbol=CURRENCY_SYMBOLS[entryCurr]||entryCurr;
+            const dispNorm=e.normalized?parseFloat(convertPrice(e.normalized,entryCurr).toFixed(1)):null;
+            const dispPrice=parseFloat(convertPrice(e.price,entryCurr).toFixed(2));
             return (
               <div key={e.id} style={{background:comp?.isLowest?"#f0faf4":"#fff",border:`1px solid ${comp?.isLowest?"#a8d5b5":"#ddd"}`,borderRadius:12,padding:"12px 16px",marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
@@ -330,19 +426,24 @@ export default function App() {
                 )}
                 {e.pricingType==="bundle"&&<span style={{fontSize:11,padding:"2px 7px",borderRadius:6,background:"#fff8e1",color:"#b26a00",fontFamily:ff,display:"inline-block",marginTop:4}}>bundle ×{e.bundleQty}</span>}
                 <div style={{display:"flex",gap:16,marginTop:6,flexWrap:"wrap",fontSize:13,fontFamily:ff}}>
-                  <span><span style={{color:"#888"}}>Paid: </span>${e.price.toFixed(2)}</span>
+                  <span>
+                    <span style={{color:"#888"}}>Paid: </span>
+                    {entryCurr===displayCurrency
+                      ? `${entrySymbol}${e.price.toFixed(2)}`
+                      : `${entrySymbol}${e.price.toFixed(2)} (${currSymbol}${dispPrice})`}
+                  </span>
                   <span><span style={{color:"#888"}}>Qty: </span>{e.qty}{e.unit}</span>
-                  {e.normalized&&<span style={{color:"#1a73e8",fontWeight:500}}>${e.normalized.toFixed(1)} {e.normLabel}</span>}
+                  {dispNorm&&<span style={{color:"#1a73e8",fontWeight:500}}>{currSymbol}{dispNorm} {e.normLabel}</span>}
                 </div>
                 {e.origPrice&&(
                   <div style={{fontSize:12,marginTop:5,color:e.price>e.origPrice?"#c0392b":"#888",fontFamily:ff}}>
-                    Original: ${e.origPrice} → Paid: ${e.price.toFixed(2)}
+                    Original: {entrySymbol}{e.origPrice} → Paid: {entrySymbol}{e.price.toFixed(2)}
                     {e.price>e.origPrice&&" — paid MORE than original!"}
                     {e.price<e.origPrice&&` — saved ${(((e.origPrice-e.price)/e.origPrice)*100).toFixed(1)}%`}
                   </div>
                 )}
                 {shrink&&<div style={{fontSize:12,marginTop:5,color:"#b26a00",fontFamily:ff}}>⚠ Shrinkflation: {shrink}</div>}
-                {comp&&!comp.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#888",fontFamily:ff}}>💡 Cheaper: {comp.cheapestBrand} at ${comp.minNorm.toFixed(1)} {e.normLabel}</div>}
+                {comp&&!comp.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#888",fontFamily:ff}}>💡 Cheaper: {comp.cheapestBrand} at {currSymbol}{comp.minNorm.toFixed(1)} {e.normLabel}</div>}
                 {comp?.isLowest&&<div style={{fontSize:12,marginTop:5,color:"#1e7e34",fontFamily:ff}}>✓ Best price among brands</div>}
                 {e.note&&<div style={{fontSize:12,marginTop:4,color:"#888",fontStyle:"italic",fontFamily:ff}}>{e.note}</div>}
                 <div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
@@ -395,12 +496,12 @@ export default function App() {
                   <LineChart data={chartData} margin={{top:5,right:10,left:0,bottom:5}}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)"/>
                     <XAxis dataKey="date" tick={{fontSize:11,fontFamily:ff}}/>
-                    <YAxis tick={{fontSize:11,fontFamily:ff}} tickFormatter={v=>`$${v.toFixed(1)}`} width={55}/>
-                    <Tooltip formatter={(v,name)=>[`$${parseFloat(v).toFixed(1)}`,name]} contentStyle={{fontSize:12,borderRadius:8,border:"1px solid #aaa",fontFamily:ff}}/>
+                    <YAxis tick={{fontSize:11,fontFamily:ff}} tickFormatter={v=>`${currSymbol}${v.toFixed(1)}`} width={62}/>
+                    <Tooltip formatter={(v,name)=>[`${currSymbol}${parseFloat(v).toFixed(1)}`,name]} contentStyle={{fontSize:12,borderRadius:8,border:"1px solid #aaa",fontFamily:ff}}/>
                     {chartKeys.map((k,i)=>(<Line key={k} type="monotone" dataKey={k} stroke={COLORS[i%COLORS.length]} strokeWidth={2} dot={{r:4}} activeDot={{r:6}} connectNulls={false}/>))}
                   </LineChart>
                 </ResponsiveContainer>
-                <p style={{fontSize:11,color:"#888",marginTop:8,textAlign:"center",fontFamily:ff}}>Normalized price over time</p>
+                <p style={{fontSize:11,color:"#888",marginTop:8,textAlign:"center",fontFamily:ff}}>Normalized price in {displayCurrency} over time</p>
               </div>
           }
         </div>
