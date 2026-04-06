@@ -165,7 +165,7 @@ export default function App() {
   const fetchFx = useCallback(async()=>{
     setFxLoading(true); setFxError(null);
     try {
-      const res=await fetch('https://api.frankfurter.app/latest?from=HKD&to=CAD,CNY,EUR,GBP,JPY,SGD,USD');
+      const res=await fetch('https://api.frankfurter.dev/v1/latest?from=HKD&to=CAD,CNY,EUR,GBP,JPY,SGD,USD');
       if(!res.ok) throw new Error();
       const data=await res.json();
       const rates={ HKD:1,...data.rates };
