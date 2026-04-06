@@ -1,4 +1,4 @@
-// TruPrice v1.13
+// TruPrice v1.14
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -14,20 +14,17 @@ const COLORS = ['#378ADD','#1D9E75','#D85A30','#7F77DD','#BA7517','#D4537E','#63
 const STORAGE_KEY = 'price_tracker_v2';
 const FX_CACHE_KEY = 'truprice_fx_cache';
 const PREFS_KEY = 'truprice_prefs';
-
 const ALL_CURRENCIES = ['CAD','CNY','EUR','GBP','HKD','JPY','SGD','USD'];
 const CURRENCY_SYMBOLS = { CAD:'CA$',CNY:'CN¥',EUR:'€',GBP:'£',HKD:'HK$',JPY:'JP¥',SGD:'SG$',USD:'US$' };
 const DEFAULT_SELECTED = ['HKD','USD','CAD'];
-
 const PRESET_TAGS = [
   'Meat & Poultry','Seafood','Vegetables','Fruits','Tofu & Eggs',
   'Dry Goods','Canned & Bottled','Rice & Grains','Noodles & Pasta','Snacks',
   'Chinese Herbs','Health Foods','Supplements',
   'Condiments & Sauces','Beverages','Dairy','Frozen','Cleaning & Personal Care'
 ];
-
 const today = () => new Date().toISOString().slice(0,10);
-const EMPTY = { name:'',brand:'',store:'',tag:'',pricingType:'single',price:'',qty:'',unit:'g',bundleQty:'2',origPrice:'',note:'',priceDate:today(),currency:'HKD' };
+const EMPTY = { name:'',brand:'',store:'',tag:'',pricingType:'single',price:'',qty:'',unit:'g',bundleQty:'2',origPrice:'',note:'',priceDate:today(),currency:'HKD',purchased:false };
 const ff = 'system-ui,-apple-system,sans-serif';
 
 function normalizePrice(price,qty,unit,bundleQty=1) {
@@ -43,8 +40,27 @@ const load = () => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY))|
 const save = d => { try { localStorage.setItem(STORAGE_KEY,JSON.stringify(d)); } catch {} };
 const loadFxCache = () => { try { return JSON.parse(localStorage.getItem(FX_CACHE_KEY))||null; } catch { return null; } };
 const saveFxCache = d => { try { localStorage.setItem(FX_CACHE_KEY,JSON.stringify(d)); } catch {} };
-const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY))||{ selectedCurrencies:DEFAULT_SELECTED, displayCurrency:'HKD' }; } catch { return { selectedCurrencies:DEFAULT_SELECTED, displayCurrency:'HKD' }; } };
+const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY))||{ selectedCurrencies:DEFAULT_SELECTED,displayCurrency:'HKD' }; } catch { return { selectedCurrencies:DEFAULT_SELECTED,displayCurrency:'HKD' }; } };
 const savePrefs = d => { try { localStorage.setItem(PREFS_KEY,JSON.stringify(d)); } catch {} };
+
+function BagIcon({ size=14, color='currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke={color} strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+      <path d='M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z'/>
+      <line x1='3' y1='6' x2='21' y2='6'/>
+      <path d='M16 10a4 4 0 01-8 0'/>
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+      <circle cx='12' cy='8' r='4'/>
+      <path d='M4 20c0-4 3.6-7 8-7s8 3 8 7'/>
+    </svg>
+  );
+}
 
 function ClearableInput({ value, onChange, style, ...props }) {
   return (
@@ -114,15 +130,6 @@ function CustomTooltip({ active, payload, label, currSymbol, entries, chartGroup
   );
 }
 
-function UserIcon() {
-  return (
-    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-      <circle cx='12' cy='8' r='4'/>
-      <path d='M4 20c0-4 3.6-7 8-7s8 3 8 7'/>
-    </svg>
-  );
-}
-
 export default function App() {
   const [entries,setEntries] = useState(load);
   const [tab,setTab] = useState('history');
@@ -133,16 +140,12 @@ export default function App() {
   const [filterTag,setFilterTag] = useState('__all__');
   const [chartGroupBy,setChartGroupBy] = useState('store');
   const [showPersonalization,setShowPersonalization] = useState(false);
-
+  const [expandedId,setExpandedId] = useState(null);
   const [prefs,setPrefs] = useState(loadPrefs);
-  const displayCurrency = prefs.displayCurrency;
-  const selectedCurrencies = prefs.selectedCurrencies;
 
-  const updatePrefs = (updates) => {
-    const newPrefs = {...prefs,...updates};
-    setPrefs(newPrefs);
-    savePrefs(newPrefs);
-  };
+  const displayCurrency=prefs.displayCurrency;
+  const selectedCurrencies=prefs.selectedCurrencies;
+  const updatePrefs=(updates)=>{ const n={...prefs,...updates}; setPrefs(n); savePrefs(n); };
 
   const [fxRates,setFxRates] = useState(null);
   const [fxUpdated,setFxUpdated] = useState(null);
@@ -166,7 +169,7 @@ export default function App() {
       const rates={ HKD:1,...data.rates };
       const updated=new Date().toISOString();
       setFxRates(rates); setFxUpdated(updated);
-      saveFxCache({ rates, updated });
+      saveFxCache({ rates,updated });
     } catch { setFxError('Could not fetch rates. Using cached or 1:1.'); }
     finally { setFxLoading(false); }
   },[]);
@@ -201,21 +204,21 @@ export default function App() {
   const discountInfo = useMemo(()=>{
     const sp=parseFloat(form.price),op=parseFloat(form.origPrice);
     if(!sp||!op||op===0) return null;
-    return { advertised:((op-sp)/op*100).toFixed(1), isHigher:sp>op };
+    return { advertised:((op-sp)/op*100).toFixed(1),isHigher:sp>op };
   },[form.price,form.origPrice]);
 
   function handleEdit(e) {
     setForm({ name:e.name,brand:e.brand||'',store:e.store||'',tag:e.tag||'',
       pricingType:e.pricingType||'single',price:String(e.price),qty:String(e.qty),unit:e.unit,
       bundleQty:String(e.bundleQty||2),origPrice:e.origPrice?String(e.origPrice):'',
-      note:e.note||'',priceDate:e.priceDate||today(),currency:e.currency||'HKD' });
+      note:e.note||'',priceDate:e.priceDate||today(),currency:e.currency||'HKD',purchased:e.purchased||false });
     setEditId(e.id); setTab('add');
   }
   function handleDuplicate(e) {
     setForm({ name:e.name,brand:e.brand||'',store:e.store||'',tag:e.tag||'',
       pricingType:e.pricingType||'single',price:String(e.price),qty:String(e.qty),unit:e.unit,
       bundleQty:String(e.bundleQty||2),origPrice:e.origPrice?String(e.origPrice):'',
-      note:e.note||'',priceDate:today(),currency:e.currency||'HKD' });
+      note:e.note||'',priceDate:today(),currency:e.currency||'HKD',purchased:false });
     setEditId(null); setTab('add');
   }
 
@@ -231,7 +234,7 @@ export default function App() {
       bundleQty:form.pricingType==='bundle'?parseFloat(form.bundleQty):1,
       origPrice:form.origPrice?parseFloat(form.origPrice):null,
       note:form.note.trim(),date:effectiveDate,priceDate:form.priceDate||null,createdAt:today(),
-      currency:form.currency||'HKD',
+      currency:form.currency||'HKD',purchased:form.purchased||false,
       normalized:norm?norm.normalized:null,normLabel:norm?norm.label:null,
     };
     if(editId){ setEntries(prev=>prev.map(e=>e.id===editId?{...entryData,id:editId}:e)); showToast('Record updated!'); setEditId(null); }
@@ -266,6 +269,21 @@ export default function App() {
     const isLowest=Math.abs(myDispNorm-minNorm)<0.05;
     const cheapest=converted.find(e=>Math.abs(e.dispNorm-minNorm)<0.05);
     return { isLowest,cheapestBrand:cheapest?.brand||'',minNorm };
+  }
+
+  // Get purchase history for an item
+  function getPurchaseHistory(name) {
+    return entries
+      .filter(e=>e.name===name&&e.purchased&&e.normalized)
+      .sort((a,b)=>b.date.localeCompare(a.date));
+  }
+
+  // Get best observed price for an item
+  function getBestObserved(name) {
+    const observed=entries.filter(e=>e.name===name&&!e.purchased&&e.normalized);
+    if(!observed.length) return null;
+    const converted=observed.map(e=>({ ...e,dispNorm:parseFloat(toDisplay(toHKD(e.normalized,e.currency||'HKD')).toFixed(1)) }));
+    return converted.reduce((best,e)=>e.dispNorm<best.dispNorm?e:best);
   }
 
   const filtered = useMemo(()=>{
@@ -321,12 +339,19 @@ export default function App() {
     return parseFloat((Math.min(...vals)*0.9).toFixed(1));
   },[chartData,chartKeys]);
 
-  const inp={ padding:'7px 10px',border:'1px solid #aaa',borderRadius:8,background:'#fff',color:'#222',fontSize:14,width:'100%',boxSizing:'border-box',fontFamily:ff };
-  const lbl=(t,req)=>(<label style={{fontSize:12,color:'#666',display:'block',marginBottom:3,fontFamily:ff}}>{t}{req&&<span style={{color:'red',marginLeft:2}}>*</span>}</label>);
-  const field=(children,cols)=>(<div style={{display:'grid',gridTemplateColumns:cols||'1fr',gap:10,marginBottom:12}}>{children}</div>);
-  const btnTab=active=>({ flex:1,padding:'7px 0',fontSize:13,cursor:'pointer',borderRadius:8,border:active?'1px solid #444441':'1px solid #aaa',background:active?'#444441':'transparent',color:active?'#fff':'#666',fontFamily:ff });
-  const toggleBtn=active=>({ padding:'5px 14px',fontSize:12,cursor:'pointer',borderRadius:6,border:active?'1px solid #444441':'1px solid #aaa',background:active?'#444441':'transparent',color:active?'#fff':'#666',fontFamily:ff });
-  const AnalysisIcon=()=>(<svg width='14' height='14' viewBox='0 0 512 512' fill='currentColor'><path d='M80 320 L180 200 L260 270 L340 140 L420 200' stroke='currentColor' strokeWidth='48' strokeLinecap='round' strokeLinejoin='round' fill='none'/><circle cx='340' cy='360' r='90' stroke='currentColor' strokeWidth='48' fill='none'/><line x1='405' y1='425' x2='460' y2='480' stroke='currentColor' strokeWidth='52' strokeLinecap='round'/></svg>);
+  function toggleCurrencySelection(c) {
+    let updated=[...selectedCurrencies];
+    if(updated.includes(c)){
+      if(updated.length<=1) return;
+      updated=updated.filter(x=>x!==c);
+      if(displayCurrency===c) updatePrefs({ selectedCurrencies:updated,displayCurrency:updated[0] });
+      else updatePrefs({ selectedCurrencies:updated });
+    } else {
+      if(updated.length>=3) updated=updated.slice(1);
+      updated=[...updated,c];
+      updatePrefs({ selectedCurrencies:updated });
+    }
+  }
 
   function handleExport() {
     const blob=new Blob([JSON.stringify(entries,null,2)],{type:'application/json'});
@@ -340,26 +365,17 @@ export default function App() {
   }
 
   const fxUpdatedLabel=fxUpdated?new Date(fxUpdated).toLocaleDateString():null;
-
-  function toggleCurrencySelection(c) {
-    let updated=[...selectedCurrencies];
-    if(updated.includes(c)){
-      if(updated.length<=1) return;
-      updated=updated.filter(x=>x!==c);
-      if(displayCurrency===c) updatePrefs({ selectedCurrencies:updated, displayCurrency:updated[0] });
-      else updatePrefs({ selectedCurrencies:updated });
-    } else {
-      if(updated.length>=3) updated=updated.slice(1);
-      updated=[...updated,c];
-      updatePrefs({ selectedCurrencies:updated });
-    }
-  }
+  const inp={ padding:'7px 10px',border:'1px solid #aaa',borderRadius:8,background:'#fff',color:'#222',fontSize:14,width:'100%',boxSizing:'border-box',fontFamily:ff };
+  const lbl=(t,req)=>(<label style={{fontSize:12,color:'#666',display:'block',marginBottom:3,fontFamily:ff}}>{t}{req&&<span style={{color:'red',marginLeft:2}}>*</span>}</label>);
+  const field=(children,cols)=>(<div style={{display:'grid',gridTemplateColumns:cols||'1fr',gap:10,marginBottom:12}}>{children}</div>);
+  const btnTab=active=>({ flex:1,padding:'7px 0',fontSize:13,cursor:'pointer',borderRadius:8,border:active?'1px solid #444441':'1px solid #aaa',background:active?'#444441':'transparent',color:active?'#fff':'#666',fontFamily:ff });
+  const toggleBtn=active=>({ padding:'5px 14px',fontSize:12,cursor:'pointer',borderRadius:6,border:active?'1px solid #444441':'1px solid #aaa',background:active?'#444441':'transparent',color:active?'#fff':'#666',fontFamily:ff });
+  const AnalysisIcon=()=>(<svg width='14' height='14' viewBox='0 0 512 512' fill='currentColor'><path d='M80 320 L180 200 L260 270 L340 140 L420 200' stroke='currentColor' strokeWidth='48' strokeLinecap='round' strokeLinejoin='round' fill='none'/><circle cx='340' cy='360' r='90' stroke='currentColor' strokeWidth='48' fill='none'/><line x1='405' y1='425' x2='460' y2='480' stroke='currentColor' strokeWidth='52' strokeLinecap='round'/></svg>);
 
   return (
     <div style={{padding:'1rem 0.75rem',maxWidth:680,margin:'0 auto',fontFamily:ff}}>
       {toast&&<div style={{position:'fixed',top:16,left:'50%',transform:'translateX(-50%)',background:'#fff',border:'1px solid #ccc',borderRadius:8,padding:'10px 20px',fontSize:13,zIndex:999,color:'#222',whiteSpace:'nowrap',fontFamily:ff}}>{toast}</div>}
 
-      {/* Banner */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14,position:'relative'}}>
         <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice - Your Grocery Shopping Companion</span>
         <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
@@ -367,30 +383,23 @@ export default function App() {
         </button>
       </div>
 
-      {/* Personalization panel */}
       {showPersonalization&&(
         <div style={{background:'#f9f9f9',border:'1px solid #eee',borderRadius:12,padding:'1rem',marginBottom:14}}>
           <p style={{fontSize:13,fontWeight:500,color:'#444441',margin:'0 0 8px',fontFamily:ff}}>Personalization</p>
-          <p style={{fontSize:12,color:'#666',margin:'0 0 8px',fontFamily:ff}}>Select 3 currencies for the quick switch bar (tap to toggle):</p>
+          <p style={{fontSize:12,color:'#666',margin:'0 0 8px',fontFamily:ff}}>Select 3 currencies for quick switch (tap to toggle):</p>
           <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
             {ALL_CURRENCIES.map(c=>{
-              const selected=selectedCurrencies.includes(c);
-              return (
-                <button key={c} onClick={()=>toggleCurrencySelection(c)} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:selected?'1px solid #444441':'1px solid #aaa',background:selected?'#444441':'transparent',color:selected?'#fff':'#666',fontFamily:ff}}>
-                  {c}
-                </button>
-              );
+              const sel=selectedCurrencies.includes(c);
+              return <button key={c} onClick={()=>toggleCurrencySelection(c)} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:sel?'1px solid #444441':'1px solid #aaa',background:sel?'#444441':'transparent',color:sel?'#fff':'#666',fontFamily:ff}}>{c}</button>;
             })}
           </div>
           <p style={{fontSize:12,color:'#666',margin:'0 0 6px',fontFamily:ff}}>Default display currency:</p>
           <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
             {selectedCurrencies.map(c=>(
-              <button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:displayCurrency===c?'1px solid #444441':'1px solid #aaa',background:displayCurrency===c?'#444441':'transparent',color:displayCurrency===c?'#fff':'#666',fontFamily:ff}}>
-                {c}
-              </button>
+              <button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:displayCurrency===c?'1px solid #444441':'1px solid #aaa',background:displayCurrency===c?'#444441':'transparent',color:displayCurrency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>
             ))}
           </div>
-          <p style={{fontSize:11,color:'#aaa',marginTop:12,marginBottom:0,fontFamily:ff}}>More personalization options coming soon (language, account login).</p>
+          <p style={{fontSize:11,color:'#aaa',marginTop:12,marginBottom:0,fontFamily:ff}}>More personalization options coming soon.</p>
         </div>
       )}
 
@@ -410,6 +419,7 @@ export default function App() {
       </div>}
       {fxError&&tab!=='add'&&<div style={{fontSize:12,color:'#c0392b',marginBottom:10,fontFamily:ff}}>{fxError}</div>}
 
+      {/* ADD / EDIT */}
       {tab==='add'&&(
         <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'1.25rem'}}>
           {editId&&<p style={{fontSize:12,color:'#1a73e8',marginBottom:12,marginTop:0,fontFamily:ff}}>Editing existing record</p>}
@@ -427,8 +437,12 @@ export default function App() {
           </div>
           <div style={{marginBottom:12}}>
             {lbl('Pricing type',true)}
-            <div style={{display:'flex',gap:8}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
               {['single','bundle'].map(t=>(<button key={t} onClick={()=>setF('pricingType',t)} style={{padding:'7px 16px',fontSize:13,cursor:'pointer',borderRadius:8,border:form.pricingType===t?'1px solid #444441':'1px solid #aaa',background:form.pricingType===t?'#444441':'transparent',color:form.pricingType===t?'#fff':'#666',textTransform:'capitalize',fontFamily:ff}}>{t}</button>))}
+              <label style={{display:'flex',alignItems:'center',gap:6,marginLeft:8,fontSize:13,color:'#666',cursor:'pointer',fontFamily:ff}}>
+                <input type='checkbox' checked={form.purchased} onChange={e=>setF('purchased',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
+                Purchased?
+              </label>
             </div>
           </div>
           <div style={{marginBottom:12}}>
@@ -484,6 +498,7 @@ export default function App() {
         </div>
       )}
 
+      {/* RECORD */}
       {tab==='history'&&(
         <div>
           <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
@@ -519,49 +534,96 @@ export default function App() {
             const entrySymbol=CURRENCY_SYMBOLS[entryCurr]||entryCurr;
             const dispNorm=e.normalized?parseFloat(toDisplay(toHKD(e.normalized,entryCurr)).toFixed(1)):null;
             const dispPrice=parseFloat(convertPrice(e.price,entryCurr).toFixed(2));
+            const isExpanded=expandedId===e.id;
+            const purchaseHistory=isExpanded?getPurchaseHistory(e.name):[];
+            const bestObserved=isExpanded?getBestObserved(e.name):null;
             return (
               <div key={e.id} style={{background:comp?.isLowest?'#f0faf4':'#fff',border:'1px solid '+(comp?.isLowest?'#a8d5b5':'#ddd'),borderRadius:12,padding:'12px 16px',marginBottom:10}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
-                  <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{e.name}</span>
-                  <span style={{fontSize:12,color:'#888',fontFamily:ff,whiteSpace:'nowrap'}}>{e.date}</span>
+                {/* Clickable header area */}
+                <div onClick={()=>setExpandedId(isExpanded?null:e.id)} style={{cursor:'pointer'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
+                    <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{e.name}</span>
+                    <span style={{fontSize:12,color:'#888',fontFamily:ff,whiteSpace:'nowrap'}}>{e.date}</span>
+                  </div>
+                  {(e.store||e.brand)&&(
+                    <div style={{fontSize:11,color:'#999',fontFamily:ff,marginTop:2,display:'flex',gap:12}}>
+                      {e.store&&<span>Store: {e.store}</span>}
+                      {e.brand&&<span>Brand: {e.brand}</span>}
+                    </div>
+                  )}
+                  {e.tag&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:6,background:'#f0f0f0',color:'#666',fontFamily:ff,display:'inline-block',marginTop:4}}>{e.tag}</span>}
+                  {e.pricingType==='bundle'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4,marginLeft:4}}>bundle x{e.bundleQty}</span>}
+                  <div style={{display:'flex',gap:16,marginTop:6,flexWrap:'wrap',fontSize:13,fontFamily:ff,alignItems:'center'}}>
+                    <span><span style={{color:'#888'}}>Price: </span>{entryCurr===displayCurrency?entrySymbol+e.price.toFixed(2):entrySymbol+e.price.toFixed(2)+' ('+currSymbol+dispPrice+')'}</span>
+                    <span><span style={{color:'#888'}}>Size: </span>{e.qty}{e.unit}</span>
+                    {dispNorm&&(
+                      <span style={{display:'flex',alignItems:'center',gap:4,color:'#1a73e8',fontWeight:500}}>
+                        {currSymbol}{dispNorm} {e.normLabel}
+                        {e.purchased&&<BagIcon size={13} color='#1a73e8'/>}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                {(e.store||e.brand)&&(
-                  <div style={{fontSize:11,color:'#999',fontFamily:ff,marginTop:2,display:'flex',gap:12}}>
-                    {e.store&&<span>Store: {e.store}</span>}
-                    {e.brand&&<span>Brand: {e.brand}</span>}
+
+                {/* Expanded detail */}
+                {isExpanded&&(
+                  <div style={{marginTop:10,borderTop:'1px solid #eee',paddingTop:10}}>
+                    {e.origPrice&&(
+                      <div style={{fontSize:12,marginBottom:6,color:e.price>e.origPrice?'#c0392b':'#888',fontFamily:ff}}>
+                        {'Listed: '+entrySymbol+e.origPrice+' - Observed: '+entrySymbol+e.price.toFixed(2)}
+                        {e.price>e.origPrice&&' - higher than listed price!'}
+                        {e.price<e.origPrice&&' - '+(((e.origPrice-e.price)/e.origPrice)*100).toFixed(1)+'% lower'}
+                      </div>
+                    )}
+                    {shrink&&<div style={{fontSize:12,marginBottom:6,color:'#b26a00',fontFamily:ff}}>Shrinkflation: {shrink}</div>}
+                    {comp&&!comp.isLowest&&<div style={{fontSize:12,marginBottom:6,color:'#888',fontFamily:ff}}>Cheaper: {comp.cheapestBrand} at {currSymbol}{comp.minNorm.toFixed(1)} {e.normLabel}</div>}
+                    {comp?.isLowest&&<div style={{fontSize:12,marginBottom:6,color:'#1e7e34',fontFamily:ff}}>Best price among stores</div>}
+                    {e.note&&<div style={{fontSize:12,marginBottom:6,color:'#888',fontStyle:'italic',fontFamily:ff}}>{e.note}</div>}
+
+                    {/* Best observed deal */}
+                    {bestObserved&&!e.purchased&&(
+                      <div style={{fontSize:12,color:'#1e7e34',marginBottom:6,fontFamily:ff}}>
+                        Best observed deal: {currSymbol}{bestObserved.dispNorm} {bestObserved.normLabel} at {bestObserved.store||bestObserved.brand||'unknown'}
+                      </div>
+                    )}
+
+                    {/* Purchase history */}
+                    {purchaseHistory.length>0&&(
+                      <div style={{marginTop:8}}>
+                        <div style={{fontSize:11,color:'#999',fontFamily:ff,marginBottom:4,display:'flex',alignItems:'center',gap:4}}>
+                          <BagIcon size={11} color='#999'/>
+                          Purchase history
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:2}}>
+                          <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>Date</span>
+                          <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>Unit price</span>
+                          {purchaseHistory.map(p=>{
+                            const pNorm=parseFloat(toDisplay(toHKD(p.normalized,p.currency||'HKD')).toFixed(1));
+                            return [
+                              <span key={p.id+'d'} style={{fontSize:12,color:'#666',fontFamily:ff}}>{p.date}</span>,
+                              <span key={p.id+'p'} style={{fontSize:12,color:'#444',fontFamily:ff}}>{currSymbol}{pNorm} {p.normLabel}</span>
+                            ];
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{marginTop:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+                      <div style={{display:'flex',gap:8}}>
+                        <button onClick={()=>handleEdit(e)} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Edit</button>
+                        <button onClick={()=>handleDuplicate(e)} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Duplicate</button>
+                      </div>
+                      <button onClick={()=>setEntries(prev=>prev.filter(x=>x.id!==e.id))} style={{fontSize:12,padding:'5px 14px',border:'1px solid #ddd',borderRadius:6,background:'transparent',color:'#aaa',cursor:'pointer',fontFamily:ff}}>Delete</button>
+                    </div>
                   </div>
                 )}
-                {e.tag&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:6,background:'#f0f0f0',color:'#666',fontFamily:ff,display:'inline-block',marginTop:4}}>{e.tag}</span>}
-                {e.pricingType==='bundle'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4,marginLeft:4}}>bundle x{e.bundleQty}</span>}
-                <div style={{display:'flex',gap:16,marginTop:6,flexWrap:'wrap',fontSize:13,fontFamily:ff}}>
-                  <span><span style={{color:'#888'}}>Price: </span>{entryCurr===displayCurrency?entrySymbol+e.price.toFixed(2):entrySymbol+e.price.toFixed(2)+' ('+currSymbol+dispPrice+')'}</span>
-                  <span><span style={{color:'#888'}}>Size: </span>{e.qty}{e.unit}</span>
-                  {dispNorm&&<span style={{color:'#1a73e8',fontWeight:500}}>{currSymbol}{dispNorm} {e.normLabel}</span>}
-                </div>
-                {e.origPrice&&(
-                  <div style={{fontSize:12,marginTop:5,color:e.price>e.origPrice?'#c0392b':'#888',fontFamily:ff}}>
-                    {'Listed: '+entrySymbol+e.origPrice+' - Observed: '+entrySymbol+e.price.toFixed(2)}
-                    {e.price>e.origPrice&&' - higher than listed price!'}
-                    {e.price<e.origPrice&&' - '+(((e.origPrice-e.price)/e.origPrice)*100).toFixed(1)+'% lower'}
-                  </div>
-                )}
-                {shrink&&<div style={{fontSize:12,marginTop:5,color:'#b26a00',fontFamily:ff}}>Shrinkflation: {shrink}</div>}
-                {comp&&!comp.isLowest&&<div style={{fontSize:12,marginTop:5,color:'#888',fontFamily:ff}}>Cheaper: {comp.cheapestBrand} at {currSymbol}{comp.minNorm.toFixed(1)} {e.normLabel}</div>}
-                {comp?.isLowest&&<div style={{fontSize:12,marginTop:5,color:'#1e7e34',fontFamily:ff}}>Best price among stores</div>}
-                {e.note&&<div style={{fontSize:12,marginTop:4,color:'#888',fontStyle:'italic',fontFamily:ff}}>{e.note}</div>}
-                <div style={{marginTop:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                  <div style={{display:'flex',gap:8}}>
-                    <button onClick={()=>handleEdit(e)} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Edit</button>
-                    <button onClick={()=>handleDuplicate(e)} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Duplicate</button>
-                  </div>
-                  <button onClick={()=>setEntries(prev=>prev.filter(x=>x.id!==e.id))} style={{fontSize:12,padding:'5px 14px',border:'1px solid #ddd',borderRadius:6,background:'transparent',color:'#aaa',cursor:'pointer',fontFamily:ff}}>Delete</button>
-                </div>
               </div>
             );
           })}
         </div>
       )}
 
+      {/* ANALYSIS */}
       {tab==='chart'&&(
         <div>
           <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
