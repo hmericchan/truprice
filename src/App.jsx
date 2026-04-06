@@ -1,4 +1,4 @@
-// TruPrice v1.15
+// TruPrice v1.16
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -340,8 +340,11 @@ export default function App() {
   }
 
   function handleExport() {
+    const now=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    const filename='TruPrice_'+now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'_'+pad(now.getHours())+pad(now.getMinutes())+pad(now.getSeconds())+'.json';
     const blob=new Blob([JSON.stringify(entries,null,2)],{type:'application/json'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='truprice_records.json'; a.click();
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
   }
   function handleImport(e) {
     const file=e.target.files[0]; if(!file) return;
@@ -362,11 +365,12 @@ export default function App() {
     <div style={{padding:'1rem 0.75rem',maxWidth:680,margin:'0 auto',fontFamily:ff}}>
       {toast&&<div style={{position:'fixed',top:16,left:'50%',transform:'translateX(-50%)',background:'#fff',border:'1px solid #ccc',borderRadius:8,padding:'10px 20px',fontSize:13,zIndex:999,color:'#222',whiteSpace:'nowrap',fontFamily:ff}}>{toast}</div>}
 
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14,position:'relative'}}>
+      <div style={{textAlign:'center',marginBottom:14,position:'relative'}}>
         <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice - Your Grocery Shopping Companion</span>
         <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
           <UserIcon/>
         </button>
+        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v1.16</span>
       </div>
 
       {showPersonalization&&(
