@@ -921,49 +921,63 @@ export default function App() {
               </div>
             </div>
 
-            {/* Pillar 3: Price history table */}
-            <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'12px 16px'}}>
+            {/* Pillar 3: Price history cards */}
+            <div>
               <div style={{fontSize:11,color:'#aaa',fontFamily:ff,marginBottom:8}}>Price history · {gEntries.length} records</div>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff,tableLayout:'fixed'}}>
-                <colgroup>
-                  <col style={{width:'22%'}}/>
-                  <col style={{width:'28%'}}/>
-                  <col style={{width:'22%'}}/>
-                  <col style={{width:'18%'}}/>
-                  <col style={{width:'10%'}}/>
-                </colgroup>
-                <thead>
-                  <tr style={{borderBottom:'1px solid #eee'}}>
-                    <th style={{padding:'4px 6px 8px 0',textAlign:'left',fontSize:11,color:'#aaa',fontWeight:400}}>Date</th>
-                    <th style={{padding:'4px 6px 8px',textAlign:'left',fontSize:11,color:'#aaa',fontWeight:400}}>Note</th>
-                    <th style={{padding:'4px 6px 8px',textAlign:'right',fontSize:11,color:'#aaa',fontWeight:400}}>Price</th>
-                    <th style={{padding:'4px 0 8px 6px',textAlign:'right',fontSize:11,color:'#aaa',fontWeight:400}}>Norm.</th>
-                    <th style={{padding:'4px 0 8px 6px',textAlign:'right',fontSize:11,color:'#aaa',fontWeight:400}}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gEntries.map(e=>{
-                    const eCurr=e.currency||'HKD';
-                    const eSymbol=CURRENCY_SYMBOLS[eCurr]||eCurr;
-                    const eDn=dispNormOf(e);
-                    const isLow=isHistoricalLowEntry(e,gEntries);
-                    return (
-                      <tr key={e.id} style={{background:isLow?'#edfbf3':'transparent',borderBottom:'1px solid #f5f5f5'}}>
-                        <td style={{padding:'6px 6px 6px 0',color:'#666',whiteSpace:'nowrap',overflow:'hidden'}}>
-                          {e.date}{e.purchased&&<span style={{marginLeft:4,display:'inline-flex',verticalAlign:'middle'}}><BagIcon size={11} color='#aaa'/></span>}
-                        </td>
-                        <td style={{padding:'6px',color:'#999',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.note||''}</td>
-                        <td style={{padding:'6px',textAlign:'right',color:'#444',whiteSpace:'nowrap',overflow:'hidden',fontSize:11}}>{eSymbol}{e.price.toFixed(2)}</td>
-                        <td style={{padding:'6px 0 6px 6px',textAlign:'right',color:'#1a73e8',fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',fontSize:11}}>{eDn!=null?currSymbol+eDn:'—'}</td>
-                        <td style={{padding:'6px 0 6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>
-                          <button onClick={()=>handleEdit(e,true)} style={{fontSize:10,padding:'2px 6px',border:'1px solid #ddd',borderRadius:4,background:'transparent',color:'#888',cursor:'pointer',fontFamily:ff}}>Edit</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <div style={{marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,borderTop:'1px solid #f0f0f0',paddingTop:12}}>
+              {gEntries.map(e=>{
+                const eCurr=e.currency||'HKD';
+                const eSymbol=CURRENCY_SYMBOLS[eCurr]||eCurr;
+                const eDn=dispNormOf(e);
+                const isLow=isHistoricalLowEntry(e,gEntries);
+                return (
+                  <div key={e.id} style={{
+                    background:isLow?'#edfbf3':'#fff',
+                    border:'1px solid '+(isLow?'#a8d5b5':'#ddd'),
+                    borderRadius:10,
+                    padding:'10px 14px',
+                    marginBottom:8,
+                  }}>
+                    {/* Card top row: date + purchased icon + record low badge */}
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{e.date}</span>
+                        {e.purchased&&<BagIcon size={14} color='#888'/>}
+                        {isLow&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:'#1e7e34',color:'#fff',fontFamily:ff}}>Record Low</span>}
+                      </div>
+                      <span style={{fontSize:13,color:'#1a73e8',fontWeight:500,fontFamily:ff}}>{eDn!=null?currSymbol+eDn+' '+(e.normLabel||''):'—'}</span>
+                    </div>
+                    {/* Price + size */}
+                    <div style={{fontSize:12,color:'#666',fontFamily:ff,marginBottom:e.note?6:0}}>
+                      <span>{eSymbol}{e.price.toFixed(2)}</span>
+                      <span style={{marginLeft:12,color:'#aaa'}}>{e.qty}{e.unit}</span>
+                      {e.pricingType==='bundle'&&<span style={{marginLeft:8,fontSize:11,color:'#b26a00'}}>bundle x{e.bundleQty}</span>}
+                      {e.pricingType==='buyxgety'&&<span style={{marginLeft:8,fontSize:11,color:'#b26a00'}}>buy {e.buyX} get {e.getY} free</span>}
+                    </div>
+                    {/* Note */}
+                    {e.note&&<div style={{fontSize:11,color:'#999',fontFamily:ff,marginBottom:6,fontStyle:'italic'}}>{e.note}</div>}
+                    {/* Actions */}
+                    <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
+                      <button
+                        onClick={()=>handleEdit(e,true)}
+                        style={{fontSize:11,padding:'3px 10px',border:'1px solid '+(isLow?'#a8d5b5':'#ddd'),borderRadius:5,background:'transparent',color:isLow?'#1e7e34':'#888',cursor:'pointer',fontFamily:ff}}
+                      >Edit</button>
+                      <button
+                        onClick={()=>{
+                          if(window.confirm('Delete this record?')){
+                            const remaining=entries.filter(x=>x.id!==e.id);
+                            setEntries(remaining);
+                            const stillExists=remaining.some(x=>groupKey(x)===detailKey);
+                            if(!stillExists) navigateToRecord();
+                          }
+                        }}
+                        style={{fontSize:11,padding:'3px 10px',border:'1px solid #f5c6c6',borderRadius:5,background:'transparent',color:'#c0392b',cursor:'pointer',fontFamily:ff}}
+                      >Delete</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Group actions */}
+              <div style={{marginTop:8,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
                 <button onClick={()=>handleDuplicate(gEntries[0])} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Duplicate latest</button>
                 <button
                   onClick={()=>{
