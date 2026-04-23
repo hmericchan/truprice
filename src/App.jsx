@@ -1,4 +1,4 @@
-// TruPrice v1.17b
+// TruPrice v2.0
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -33,7 +33,6 @@ function normalizePrice(price,qty,unit,pricingType,bundleQty,buyX,getY) {
   const totalBase=q*(TO_BASE[unit]||1);
   const type=UNIT_TYPE[unit];
   const divisor=(type==='count'||type==='pack')?1:100;
-
   let effectivePrice=null;
   if(pricingType==='single') {
     const p=parseFloat(price);
@@ -58,8 +57,17 @@ const loadFxCache = () => { try { return JSON.parse(localStorage.getItem(FX_CACH
 const saveFxCache = d => { try { localStorage.setItem(FX_CACHE_KEY,JSON.stringify(d)); } catch {} };
 const loadPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY))||{ selectedCurrencies:DEFAULT_SELECTED,displayCurrency:'HKD' }; } catch { return { selectedCurrencies:DEFAULT_SELECTED,displayCurrency:'HKD' }; } };
 const savePrefs = d => { try { localStorage.setItem(PREFS_KEY,JSON.stringify(d)); } catch {} };
-
 const groupKey = e => e.name.trim()+'|||'+(e.brand||'').trim()+'|||'+(e.store||'').trim();
+
+function timeAgo(dateStr) {
+  const now=new Date(), then=new Date(dateStr);
+  const months=Math.round((now-then)/(1000*60*60*24*30));
+  if(months<1) return 'recently';
+  if(months===1) return '1 month ago';
+  if(months<12) return months+' months ago';
+  const years=Math.floor(months/12);
+  return years===1?'1 year ago':years+' years ago';
+}
 
 function BagIcon({ size=14, color='currentColor' }) {
   return (
@@ -76,6 +84,23 @@ function UserIcon() {
     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
       <circle cx='12' cy='8' r='4'/>
       <path d='M4 20c0-4 3.6-7 8-7s8 3 8 7'/>
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round'>
+      <line x1='12' y1='5' x2='12' y2='19'/>
+      <line x1='5' y1='12' x2='19' y2='12'/>
+    </svg>
+  );
+}
+
+function ChevronLeft() {
+  return (
+    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
+      <polyline points='15 18 9 12 15 6'/>
     </svg>
   );
 }
@@ -148,15 +173,40 @@ function CustomTooltip({ active, payload, label, currSymbol, entries, chartGroup
   );
 }
 
+// Left strip back navigation
+function BackStrip({ onBack }) {
+  const [hovered,setHovered] = useState(false);
+  return (
+    <div
+      onClick={onBack}
+      onMouseEnter={()=>setHovered(true)}
+      onMouseLeave={()=>setHovered(false)}
+      style={{
+        position:'fixed',left:0,top:0,bottom:0,width:28,
+        display:'flex',alignItems:'center',justifyContent:'center',
+        cursor:'pointer',zIndex:100,
+        background:hovered?'rgba(0,0,0,0.04)':'transparent',
+        transition:'background 0.15s',
+        userSelect:'none',
+      }}
+    >
+      <ChevronLeft/>
+    </div>
+  );
+}
+
 export default function App() {
   const [entries,setEntries] = useState(load);
-  const [tab,setTab] = useState('history');
+  const [view,setView] = useState('record');
+  const [detailKey,setDetailKey] = useState(null);
+  const [vizItemName,setVizItemName] = useState(null);
   const [form,setForm] = useState(EMPTY);
   const [editId,setEditId] = useState(null);
+  const [editFromDetail,setEditFromDetail] = useState(false);
   const [viewBy,setViewBy] = useState('item');
   const [filterValue,setFilterValue] = useState('__all__');
   const [filterTag,setFilterTag] = useState('__all__');
-  const [chartGroupBy,setChartGroupBy] = useState('store');
+  const [vizStoreFilter,setVizStoreFilter] = useState('__all__');
   const [showPersonalization,setShowPersonalization] = useState(false);
   const [prefs,setPrefs] = useState(loadPrefs);
   const [mixedBundleMsg,setMixedBundleMsg] = useState(false);
@@ -216,12 +266,10 @@ export default function App() {
     return itemNames;
   },[viewBy,itemNames,brandNames,storeNames]);
 
-  // Obs 1: norm uses new pricingType logic
   const norm = useMemo(()=>
     normalizePrice(form.price,form.qty,form.unit,form.pricingType,form.bundleQty,form.buyX,form.getY),
     [form.price,form.qty,form.unit,form.pricingType,form.bundleQty,form.buyX,form.getY]);
 
-  // Obs 1: discount info — works for single, bundle, buyxgety using origUnitPrice
   const discountInfo = useMemo(()=>{
     if(form.pricingType==='single') {
       const sp=parseFloat(form.price),op=parseFloat(form.origPrice);
@@ -245,15 +293,18 @@ export default function App() {
     return null;
   },[form.price,form.origPrice,form.origUnitPrice,form.pricingType,form.bundleQty,form.buyX,form.getY,norm]);
 
-  function handleEdit(e) {
+  function handleEdit(e, fromDetail=false) {
     setForm({ name:e.name,brand:e.brand||'',store:e.store||'',tag:e.tag||'',
       pricingType:e.pricingType||'single',price:String(e.price),qty:String(e.qty),unit:e.unit,
       bundleQty:String(e.bundleQty||2),origPrice:e.origPrice?String(e.origPrice):'',
       origUnitPrice:e.origUnitPrice?String(e.origUnitPrice):'',
       buyX:String(e.buyX||2),getY:String(e.getY||1),
       note:e.note||'',priceDate:e.priceDate||today(),currency:e.currency||'HKD',purchased:e.purchased||false });
-    setEditId(e.id); setTab('add');
+    setEditId(e.id);
+    setEditFromDetail(fromDetail);
+    setView('add');
   }
+
   function handleDuplicate(e) {
     setForm({ name:e.name,brand:e.brand||'',store:e.store||'',tag:e.tag||'',
       pricingType:e.pricingType||'single',price:String(e.price),qty:String(e.qty),unit:e.unit,
@@ -261,7 +312,9 @@ export default function App() {
       origUnitPrice:e.origUnitPrice?String(e.origUnitPrice):'',
       buyX:String(e.buyX||2),getY:String(e.getY||1),
       note:e.note||'',priceDate:today(),currency:e.currency||'HKD',purchased:false });
-    setEditId(null); setTab('add');
+    setEditId(null);
+    setEditFromDetail(false);
+    setView('add');
   }
 
   function handleSave() {
@@ -286,13 +339,27 @@ export default function App() {
       currency:form.currency||'HKD',purchased:form.purchased||false,
       normalized:norm?norm.normalized:null,normLabel:norm?norm.label:null,
     };
-    if(editId){ setEntries(prev=>prev.map(e=>e.id===editId?{...entryData,id:editId}:e)); showToast('Record updated!'); setEditId(null); }
-    else { setEntries(prev=>[{...entryData,id:Date.now()},...prev]); showToast('Entry saved!'); }
-    setForm(EMPTY); setTab('history');
+    if(editId){
+      setEntries(prev=>prev.map(e=>e.id===editId?{...entryData,id:editId}:e));
+      showToast('Record updated!');
+      setEditId(null);
+      if(editFromDetail){ setView('detail'); setEditFromDetail(false); }
+      else { setView('record'); }
+    } else {
+      setEntries(prev=>[{...entryData,id:Date.now()},...prev]);
+      showToast('Entry saved!');
+      setView('record');
+    }
+    setForm(EMPTY);
   }
-  function handleCancel() { setForm(EMPTY); setEditId(null); setTab('history'); }
 
-  // Obs 2+5: competition uses item name only, latest per brand+store, matching unit types only
+  function handleCancel() {
+    setForm(EMPTY);
+    setEditId(null);
+    if(editFromDetail){ setView('detail'); setEditFromDetail(false); }
+    else { setView('record'); }
+  }
+
   function competitionInfo(itemName, myDispNorm, myUnit) {
     if(myDispNorm==null) return null;
     const myUnitType=UNIT_TYPE[myUnit];
@@ -308,16 +375,14 @@ export default function App() {
     const minNorm=Math.min(...all.map(e=>e.dn));
     const isLowest=Math.abs(myDispNorm-minNorm)<0.05;
     const cheapest=all.find(e=>Math.abs(e.dn-minNorm)<0.05);
-    return { isLowest,cheapestLabel:(cheapest?.brand||'')+(cheapest?.store?' @ '+cheapest.store:''),minNorm };
+    return { isLowest,cheapestLabel:(cheapest?.brand||'')+(cheapest?.store?' @ '+cheapest.store:''),minNorm,cheapestGk:cheapest?groupKey(cheapest):null };
   }
 
-  // Obs 4: headline = most recent non-purchased, fallback to latest overall
   function getHeadlineEntry(gEntries) {
     const nonPurchased=gEntries.filter(e=>!e.purchased);
     return nonPurchased.length>0?nonPurchased[0]:gEntries[0];
   }
 
-  // Obs 4: historical low note — only if different from headline
   function getHistoricalLow(gEntries, headlineDispNorm) {
     const withNorm=gEntries.filter(e=>e.normalized);
     if(withNorm.length<=1) return null;
@@ -326,6 +391,91 @@ export default function App() {
     if(Math.abs(minDn-(headlineDispNorm||0))<0.05) return null;
     const lowEntry=dispNorms.find(x=>Math.abs(x.dn-minDn)<0.05);
     return { dn:minDn, date:lowEntry?.e.date };
+  }
+
+  function isHistoricalLowEntry(e, gEntries) {
+    const withNorm=gEntries.filter(x=>x.normalized);
+    if(withNorm.length<=1) return false;
+    const dispNorms=withNorm.map(x=>dispNormOf(x)).filter(v=>v!=null);
+    const minDn=Math.min(...dispNorms);
+    const eDn=dispNormOf(e);
+    return eDn!=null&&Math.abs(eDn-minDn)<0.05;
+  }
+
+  // Obs 7: intelligence banner content for detail page
+  function bannerContent(gEntries) {
+    const itemName=gEntries[0]?.name;
+    const myUnitType=UNIT_TYPE[gEntries[0]?.unit];
+
+    // all groups for same item, matching unit type
+    const sameItemGroups={};
+    entries.filter(e=>e.name===itemName&&UNIT_TYPE[e.unit]===myUnitType).forEach(e=>{
+      const k=groupKey(e);
+      if(!sameItemGroups[k]) sameItemGroups[k]=[];
+      sameItemGroups[k].push(e);
+    });
+    const groupKeys=Object.keys(sameItemGroups);
+    const multiStore=groupKeys.length>1;
+
+    // latest per group
+    const latestPerGroup={};
+    groupKeys.forEach(k=>{
+      const sorted=[...sameItemGroups[k]].sort((a,b)=>b.date.localeCompare(a.date));
+      latestPerGroup[k]=sorted[0];
+    });
+
+    const currentGk=groupKey(gEntries[0]);
+    const currentLatest=latestPerGroup[currentGk]||gEntries[0];
+    const currentDn=dispNormOf(currentLatest);
+
+    // historical low within this group
+    const withNorm=gEntries.filter(e=>e.normalized);
+    const allDns=withNorm.map(e=>({ e,dn:dispNormOf(e) })).filter(x=>x.dn!=null);
+    const minDn=allDns.length?Math.min(...allDns.map(x=>x.dn)):null;
+    const lowEntry=allDns.find(x=>x.dn===minDn);
+    const isCurrentLow=currentDn!=null&&minDn!=null&&Math.abs(currentDn-minDn)<0.05;
+
+    if(!multiStore) {
+      // Scenario 1: one entry, one store
+      if(withNorm.length<=1) {
+        const store=gEntries[0]?.store||'';
+        return { line1:'Last seen'+(store?' at '+store:''), line2:timeAgo(gEntries[0]?.date)+' · '+currSymbol+(currentDn||'—')+(currentLatest?.normLabel?' '+currentLatest.normLabel:''), line3:null, competitorGk:null };
+      }
+      // Scenario 2: multiple entries, one store
+      const store=currentLatest?.store||'';
+      const nowDn=currentDn;
+      const pct=minDn&&nowDn?Math.round(Math.abs(nowDn-minDn)/minDn*100):null;
+      const arrow=nowDn&&minDn?(nowDn>minDn?'▲':'▼'):null;
+      return {
+        line1:(store||'This store')+' · Record Low: '+currSymbol+minDn+(lowEntry?.e.normLabel?' '+lowEntry.e.normLabel:''),
+        line2:'Now: '+currSymbol+(nowDn||'—')+(currentLatest?.normLabel?' '+currentLatest.normLabel:'')+(arrow&&pct?' '+arrow+pct+'%':'')+(isCurrentLow?' · Record Low ✓':''),
+        line3:lowEntry&&!isCurrentLow?'Lowest on '+lowEntry.e.date:null,
+        competitorGk:null
+      };
+    }
+
+    // multi-store: find cheapest latest
+    const allLatest=Object.values(latestPerGroup).filter(e=>e.normalized);
+    const allLatestDns=allLatest.map(e=>({ e,dn:dispNormOf(e) })).filter(x=>x.dn!=null);
+    if(!allLatestDns.length) return { line1:'No normalized data available.',line2:null,line3:null,competitorGk:null };
+    const cheapestDn=Math.min(...allLatestDns.map(x=>x.dn));
+    const cheapestEntry=allLatestDns.find(x=>Math.abs(x.dn-cheapestDn)<0.05)?.e;
+    const cheapestGk=cheapestEntry?groupKey(cheapestEntry):null;
+    const isThisCheapest=cheapestGk===currentGk;
+
+    // Scenario 3/4
+    const cheapestStore=cheapestEntry?.store||'';
+    const cheapestBrand=cheapestEntry?.brand||'';
+    const cheapestLabel=(cheapestBrand?cheapestBrand+' @ ':'')+cheapestStore;
+    const nowDn2=currentDn;
+    const pct2=cheapestDn&&nowDn2&&!isThisCheapest?Math.round(Math.abs(nowDn2-cheapestDn)/cheapestDn*100):null;
+
+    return {
+      line1:isThisCheapest?'Best deal among stores':'Best deal: '+cheapestLabel,
+      line2:currSymbol+cheapestDn+(cheapestEntry?.normLabel?' '+cheapestEntry.normLabel:'')+(cheapestEntry?.date?' · '+cheapestEntry.date:''),
+      line3:!isThisCheapest&&nowDn2?'Here: '+currSymbol+nowDn2+(pct2?' ▲'+pct2+'% more':''):null,
+      competitorGk:isThisCheapest?null:cheapestGk
+    };
   }
 
   const grouped = useMemo(()=>{
@@ -346,47 +496,49 @@ export default function App() {
     return Object.entries(map).sort((a,b)=>b[1][0].date.localeCompare(a[1][0].date));
   },[entries,filterValue,viewBy,filterTag]);
 
-  const getChartKey = useCallback((e)=>{
-    if(chartGroupBy==='item') return e.name;
-    if(chartGroupBy==='brand') return e.brand||'';
-    return e.store||'';
-  },[chartGroupBy]);
+  // detail page entries
+  const detailEntries = useMemo(()=>{
+    if(!detailKey) return [];
+    return entries.filter(e=>groupKey(e)===detailKey).sort((a,b)=>b.date.localeCompare(a.date));
+  },[entries,detailKey]);
 
-  const chartSrc = useMemo(()=>{
-    let src=filterValue==='__all__'?entries:entries.filter(e=>{
-      if(viewBy==='brand') return e.brand===filterValue;
-      if(viewBy==='store') return e.store===filterValue;
-      return e.name===filterValue;
-    });
-    if(filterTag!=='__all__') src=src.filter(e=>e.tag===filterTag);
+  // viz chart data
+  const vizEntries = useMemo(()=>{
+    if(!vizItemName) return [];
+    let src=entries.filter(e=>e.name===vizItemName&&e.normalized);
+    if(vizStoreFilter!=='__all__') src=src.filter(e=>e.store===vizStoreFilter);
     return src;
-  },[entries,filterValue,viewBy,filterTag]);
+  },[entries,vizItemName,vizStoreFilter]);
 
-  const chartKeys = useMemo(()=>[...new Set(chartSrc.filter(e=>e.normalized&&getChartKey(e)).map(getChartKey))].sort(),[chartSrc,getChartKey]);
+  const vizStores = useMemo(()=>{
+    if(!vizItemName) return [];
+    return [...new Set(entries.filter(e=>e.name===vizItemName).map(e=>e.store).filter(Boolean))].sort();
+  },[entries,vizItemName]);
 
-  const chartData = useMemo(()=>{
-    const byKey={};
-    chartSrc.forEach(e=>{
-      if(!e.normalized) return;
-      const k=getChartKey(e); if(!k) return;
+  const vizChartData = useMemo(()=>{
+    const byStore={};
+    vizEntries.forEach(e=>{
+      const k=e.store||'Unknown';
       const converted=parseFloat(toDisplay(toHKD(e.normalized,e.currency||'HKD')).toFixed(1));
-      if(!byKey[k]) byKey[k]={};
-      if(!byKey[k][e.date]) byKey[k][e.date]=[];
-      byKey[k][e.date].push(converted);
+      if(!byStore[k]) byStore[k]={};
+      if(!byStore[k][e.date]) byStore[k][e.date]=[];
+      byStore[k][e.date].push(converted);
     });
-    const dates=[...new Set(chartSrc.map(e=>e.date))].sort();
+    const dates=[...new Set(vizEntries.map(e=>e.date))].sort();
     return dates.map(d=>{
       const row={date:d};
-      Object.keys(byKey).forEach(k=>{ if(byKey[k][d]) row[k]=parseFloat((byKey[k][d].reduce((a,b)=>a+b,0)/byKey[k][d].length).toFixed(1)); });
+      Object.keys(byStore).forEach(k=>{ if(byStore[k][d]) row[k]=parseFloat((byStore[k][d].reduce((a,b)=>a+b,0)/byStore[k][d].length).toFixed(1)); });
       return row;
     });
-  },[chartSrc,getChartKey,fxRates,displayCurrency]);
+  },[vizEntries,fxRates,displayCurrency]);
 
-  const chartMin = useMemo(()=>{
-    const vals=chartData.flatMap(d=>chartKeys.map(k=>d[k]).filter(v=>v!=null));
+  const vizChartKeys = useMemo(()=>[...new Set(vizEntries.map(e=>e.store||'Unknown'))].sort(),[vizEntries]);
+
+  const vizChartMin = useMemo(()=>{
+    const vals=vizChartData.flatMap(d=>vizChartKeys.map(k=>d[k]).filter(v=>v!=null));
     if(!vals.length) return 'auto';
     return parseFloat((Math.min(...vals)*0.9).toFixed(1));
-  },[chartData,chartKeys]);
+  },[vizChartData,vizChartKeys]);
 
   function toggleCurrencySelection(c) {
     let updated=[...selectedCurrencies];
@@ -409,6 +561,7 @@ export default function App() {
     const blob=new Blob([JSON.stringify(entries,null,2)],{type:'application/json'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
   }
+
   function handleImport(e) {
     const file=e.target.files[0]; if(!file) return;
     const r=new FileReader();
@@ -416,191 +569,73 @@ export default function App() {
     r.readAsText(file); e.target.value='';
   }
 
+  function navigateToDetail(gk) { setDetailKey(gk); setView('detail'); }
+  function navigateToRecord() { setView('record'); setDetailKey(null); }
+  function navigateToViz(itemName) { setVizItemName(itemName); setVizStoreFilter('__all__'); setView('viz'); }
+
   const fxUpdatedLabel=fxUpdated?new Date(fxUpdated).toLocaleDateString():null;
+
+  // responsive max width
+  const isMobile = typeof window!=='undefined'&&window.innerWidth<600;
+  const isTablet = typeof window!=='undefined'&&window.innerWidth>=600&&window.innerWidth<1024;
+
   const inp={ padding:'7px 10px',border:'1px solid #aaa',borderRadius:8,background:'#fff',color:'#222',fontSize:14,width:'100%',boxSizing:'border-box',fontFamily:ff };
   const lbl=(t,req)=>(<label style={{fontSize:12,color:'#666',display:'block',marginBottom:3,fontFamily:ff}}>{t}{req&&<span style={{color:'red',marginLeft:2}}>*</span>}</label>);
   const field=(children,cols)=>(<div style={{display:'grid',gridTemplateColumns:cols||'1fr',gap:10,marginBottom:12}}>{children}</div>);
-  const btnTab=active=>({ flex:1,padding:'7px 0',fontSize:13,cursor:'pointer',borderRadius:8,border:active?'1px solid #444441':'1px solid #aaa',background:active?'#444441':'transparent',color:active?'#fff':'#666',fontFamily:ff });
   const toggleBtn=active=>({ padding:'5px 14px',fontSize:12,cursor:'pointer',borderRadius:6,border:active?'1px solid #444441':'1px solid #aaa',background:active?'#444441':'transparent',color:active?'#fff':'#666',fontFamily:ff });
-  const AnalysisIcon=()=>(<svg width='14' height='14' viewBox='0 0 512 512' fill='currentColor'><path d='M80 320 L180 200 L260 270 L340 140 L420 200' stroke='currentColor' strokeWidth='48' strokeLinecap='round' strokeLinejoin='round' fill='none'/><circle cx='340' cy='360' r='90' stroke='currentColor' strokeWidth='48' fill='none'/><line x1='405' y1='425' x2='460' y2='480' stroke='currentColor' strokeWidth='52' strokeLinecap='round'/></svg>);
 
-  // Obs 11: find historical low entry in a group for row highlight
-  function isHistoricalLowEntry(e, gEntries) {
-    const withNorm=gEntries.filter(x=>x.normalized);
-    if(withNorm.length<=1) return false;
-    const dispNorms=withNorm.map(x=>dispNormOf(x)).filter(v=>v!=null);
-    const minDn=Math.min(...dispNorms);
-    const eDn=dispNormOf(e);
-    return eDn!=null&&Math.abs(eDn-minDn)<0.05;
-  }
+  const containerStyle={
+    padding: view==='record'?'1rem 0.75rem':'1rem 0.75rem 1rem 2rem',
+    maxWidth: isTablet?900:'100%',
+    margin:'0 auto',
+    fontFamily:ff,
+    boxSizing:'border-box',
+  };
+
+  const detailBannerHeight=80;
 
   return (
-    <div style={{padding:'1rem 0.75rem',maxWidth:680,margin:'0 auto',fontFamily:ff}}>
+    <div style={containerStyle}>
       {toast&&<div style={{position:'fixed',top:16,left:'50%',transform:'translateX(-50%)',background:'#fff',border:'1px solid #ccc',borderRadius:8,padding:'10px 20px',fontSize:13,zIndex:999,color:'#222',whiteSpace:'nowrap',fontFamily:ff}}>{toast}</div>}
 
-      <div style={{textAlign:'center',marginBottom:14,position:'relative'}}>
-        <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice - Your Grocery Shopping Companion</span>
-        <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
-          <UserIcon/>
-        </button>
-        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v1.17b</span>
-      </div>
-
-      {showPersonalization&&(
-        <div style={{background:'#f9f9f9',border:'1px solid #eee',borderRadius:12,padding:'1rem',marginBottom:14}}>
-          <p style={{fontSize:13,fontWeight:500,color:'#444441',margin:'0 0 8px',fontFamily:ff}}>Personalization</p>
-          <p style={{fontSize:12,color:'#666',margin:'0 0 8px',fontFamily:ff}}>Select 3 currencies for quick switch:</p>
-          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
-            {ALL_CURRENCIES.map(c=>{ const sel=selectedCurrencies.includes(c); return <button key={c} onClick={()=>toggleCurrencySelection(c)} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:sel?'1px solid #444441':'1px solid #aaa',background:sel?'#444441':'transparent',color:sel?'#fff':'#666',fontFamily:ff}}>{c}</button>; })}
-          </div>
-          <p style={{fontSize:12,color:'#666',margin:'0 0 6px',fontFamily:ff}}>Default display currency:</p>
-          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-            {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:displayCurrency===c?'1px solid #444441':'1px solid #aaa',background:displayCurrency===c?'#444441':'transparent',color:displayCurrency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
-          </div>
-          <p style={{fontSize:11,color:'#aaa',marginTop:12,marginBottom:0,fontFamily:ff}}>More personalization options coming soon.</p>
-        </div>
-      )}
-
-      <div style={{display:'flex',gap:8,marginBottom:14}}>
-        {[{key:'history',label:'Record'},{key:'add',label:editId?'Edit':'+ New'},{key:'chart',label:'chart'}].map(({key,label})=>(
-          <button key={key} onClick={()=>setTab(key)} style={btnTab(tab===key)}>
-            {key==='chart'?<span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',gap:6}}><AnalysisIcon/>Analysis</span>:label}
-          </button>
-        ))}
-      </div>
-
-      {tab!=='add'&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,padding:'8px 12px',background:'#f9f9f9',border:'1px solid #eee',borderRadius:8}}>
-        <span style={{fontSize:12,color:'#666',fontFamily:ff}}>Display:</span>
-        {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{...toggleBtn(displayCurrency===c),padding:'4px 10px',fontSize:12}}>{c}</button>))}
-        <button onClick={fetchFx} disabled={fxLoading} style={{marginLeft:'auto',fontSize:11,padding:'4px 10px',borderRadius:6,border:'1px solid #aaa',background:'transparent',color:'#666',cursor:'pointer',fontFamily:ff}}>{fxLoading?'...':'Rates'}</button>
-        {fxUpdatedLabel&&<span style={{fontSize:10,color:'#aaa',fontFamily:ff}}>{fxUpdatedLabel}</span>}
-      </div>}
-      {fxError&&tab!=='add'&&<div style={{fontSize:12,color:'#c0392b',marginBottom:10,fontFamily:ff}}>{fxError}</div>}
-
-      {/* ADD / EDIT */}
-      {tab==='add'&&(
-        <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'1.25rem'}}>
-          {editId&&<p style={{fontSize:12,color:'#1a73e8',marginBottom:12,marginTop:0,fontFamily:ff}}>Editing existing record</p>}
-          <div style={{marginBottom:12}}>
-            {lbl('Item name',true)}
-            <AutocompleteInput value={form.name} onChange={v=>setF('name',v)} suggestions={itemNames} placeholder='Type or select a previous item' style={inp}/>
-          </div>
-          {field(<>
-            <div>{lbl('Brand')}<AutocompleteInput value={form.brand} onChange={v=>setF('brand',v)} suggestions={brandNames} placeholder='e.g. Quaker' style={inp}/></div>
-            <div>{lbl('Store')}<AutocompleteInput value={form.store} onChange={v=>setF('store',v)} suggestions={storeNames} placeholder='e.g. Walmart' style={inp}/></div>
-          </>,'1fr 1fr')}
-          <div style={{marginBottom:12}}>
-            {lbl('Category tag')}
-            <AutocompleteInput value={form.tag} onChange={v=>setF('tag',v)} suggestions={userTags} placeholder='e.g. Dry Goods (optional, private)' style={inp}/>
-          </div>
-
-          {/* Obs 1: pricing type buttons including mixed bundle greyed out */}
-          <div style={{marginBottom:12}}>
-            {lbl('Pricing type',true)}
-            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-              {[
-                {key:'single',label:'Single'},
-                {key:'bundle',label:'Bundle'},
-                {key:'buyxgety',label:'Buy X Get Y Free'},
-              ].map(t=>(
-                <button key={t.key} onClick={()=>setF('pricingType',t.key)} style={{padding:'7px 16px',fontSize:13,cursor:'pointer',borderRadius:8,border:form.pricingType===t.key?'1px solid #444441':'1px solid #aaa',background:form.pricingType===t.key?'#444441':'transparent',color:form.pricingType===t.key?'#fff':'#666',fontFamily:ff}}>{t.label}</button>
-              ))}
-              <button
-                onClick={()=>setMixedBundleMsg(m=>!m)}
-                style={{padding:'7px 16px',fontSize:13,cursor:'not-allowed',borderRadius:8,border:'1px solid #ddd',background:'#f5f5f5',color:'#bbb',fontFamily:ff}}>
-                Mixed Bundle
-              </button>
-              <label style={{display:'flex',alignItems:'center',gap:6,marginLeft:8,fontSize:13,color:'#666',cursor:'pointer',fontFamily:ff}}>
-                <input type='checkbox' checked={form.purchased} onChange={e=>setF('purchased',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
-                Purchased?
-              </label>
-            </div>
-            {mixedBundleMsg&&<p style={{fontSize:12,color:'#aaa',margin:'6px 0 0',fontFamily:ff}}>This feature is under development.</p>}
-          </div>
-
-          <div style={{marginBottom:12}}>
-            {lbl('Currency')}
-            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-              {ALL_CURRENCIES.map(c=>(<button key={c} onClick={()=>setF('currency',c)} style={{padding:'6px 12px',fontSize:12,cursor:'pointer',borderRadius:8,border:form.currency===c?'1px solid #444441':'1px solid #aaa',background:form.currency===c?'#444441':'transparent',color:form.currency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
-            </div>
-          </div>
-
-          {/* Obs 1: single pricing */}
-          {form.pricingType==='single'&&(
-            field(<>
-              <div>{lbl('Price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 4.99'/></div>
-              <div>{lbl('Original / listed price')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origPrice} onChange={v=>setF('origPrice',v)} placeholder='e.g. 6.99 (optional)'/></div>
-            </>,'1fr 1fr')
-          )}
-
-          {/* Obs 1: bundle pricing with origUnitPrice */}
-          {form.pricingType==='bundle'&&(
-            <div style={{background:'#f9f9f9',border:'1px solid #ddd',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
-              {field(<>
-                <div>{lbl('Total bundle price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 9.99'/></div>
-                <div>{lbl('Packs in bundle',true)}<ClearableInput style={inp} type='number' min='2' step='1' value={form.bundleQty} onChange={v=>setF('bundleQty',v)} placeholder='e.g. 2'/></div>
-              </>,'1fr 1fr')}
-              {form.price&&form.bundleQty&&<p style={{fontSize:12,color:'#666',margin:'4px 0 8px',fontFamily:ff}}>Price per pack: {CURRENCY_SYMBOLS[form.currency]||form.currency}{(parseFloat(form.price)/parseFloat(form.bundleQty)).toFixed(2)}</p>}
-              <div>{lbl('Original unit price (optional)')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 6.99 per pack'/></div>
-            </div>
-          )}
-
-          {/* Obs 1: buy x get y free */}
-          {form.pricingType==='buyxgety'&&(
-            <div style={{background:'#f9f9f9',border:'1px solid #ddd',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
-              {field(<>
-                <div>{lbl('Regular unit price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 15.00'/></div>
-                <div>{lbl('Original unit price (optional)')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 18.00'/></div>
-              </>,'1fr 1fr')}
-              {field(<>
-                <div>{lbl('Buy (X)',true)}<ClearableInput style={inp} type='number' min='1' step='1' value={form.buyX} onChange={v=>setF('buyX',v)} placeholder='e.g. 3'/></div>
-                <div>{lbl('Get free (Y)',true)}<ClearableInput style={inp} type='number' min='1' step='1' value={form.getY} onChange={v=>setF('getY',v)} placeholder='e.g. 1'/></div>
-              </>,'1fr 1fr')}
-              {form.price&&form.buyX&&form.getY&&(
-                <p style={{fontSize:12,color:'#666',margin:'4px 0 0',fontFamily:ff}}>
-                  Effective price per unit: {CURRENCY_SYMBOLS[form.currency]||form.currency}{((parseFloat(form.buyX)*parseFloat(form.price))/(parseFloat(form.buyX)+parseFloat(form.getY))).toFixed(2)}
-                </p>
-              )}
-            </div>
-          )}
-
-          {field(<>
-            <div>{lbl('Package size',true)}<ClearableInput style={inp} type='number' min='0' step='any' value={form.qty} onChange={v=>setF('qty',v)} placeholder='e.g. 500'/></div>
-            <div>{lbl('Unit',true)}
-              <select style={{...inp,height:'36px'}} value={form.unit} onChange={e=>setF('unit',e.target.value)}>
-                {UNIT_GROUPS.map(g=>(<optgroup key={g.label} label={g.label}>{g.units.map(u=><option key={u} value={u}>{u}</option>)}</optgroup>))}
-              </select>
-            </div>
-          </>,'1fr 1fr')}
-
-          {norm&&(
-            <div style={{background:'#e8f0fe',border:'1px solid #aac4f5',borderRadius:8,padding:'9px 14px',marginBottom:12}}>
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <span style={{fontSize:12,color:'#1a73e8',fontFamily:ff}}>Normalized ({form.currency}):</span>
-                <span style={{fontSize:16,fontWeight:500,color:'#1a73e8',fontFamily:ff}}>{CURRENCY_SYMBOLS[form.currency]||form.currency}{norm.normalized.toFixed(1)}<span style={{fontSize:12,fontWeight:400}}> {norm.label}</span></span>
-              </div>
-              {form.currency!==displayCurrency&&fxRates&&(
-                <div style={{fontSize:12,color:'#555',marginTop:4,fontFamily:ff}}>approx {currSymbol}{convertPrice(norm.normalized,form.currency).toFixed(1)} {norm.label} ({displayCurrency})</div>
-              )}
-            </div>
-          )}
-          {discountInfo&&(
-            <div style={{background:discountInfo.isHigher?'#fdecea':'#e6f4ea',border:'1px solid',borderColor:discountInfo.isHigher?'#f5c6c6':'#a8d5b5',borderRadius:8,padding:'8px 12px',fontSize:13,color:discountInfo.isHigher?'#c0392b':'#1e7e34',marginBottom:12,fontFamily:ff}}>
-              {discountInfo.isHigher?'Current price is HIGHER than the original listed price!':'Actual discount: '+discountInfo.advertised+'% lower than listed'}
-            </div>
-          )}
-          <div style={{marginBottom:12}}>{lbl('Note')}<ClearableInput style={inp} value={form.note} onChange={v=>setF('note',v)} placeholder='Optional note'/></div>
-          {field(<><div>{lbl('Price date')}<input style={inp} type='date' value={form.priceDate} onChange={e=>setF('priceDate',e.target.value)}/></div></>)}
-          <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
-            <button onClick={handleCancel} style={{padding:'9px 20px',background:'transparent',color:'#666',border:'1px solid #aaa',borderRadius:8,fontSize:14,cursor:'pointer',fontFamily:ff}}>Cancel</button>
-            <button onClick={handleSave} style={{padding:'9px 20px',background:'#444441',color:'#fff',border:'1px solid #444441',borderRadius:8,fontSize:14,cursor:'pointer',fontWeight:500,fontFamily:ff}}>{editId?'Update':'Save'}</button>
-          </div>
-        </div>
-      )}
-
-      {/* RECORD */}
-      {tab==='history'&&(
+      {/* ── RECORD VIEW ── */}
+      {view==='record'&&(
         <div>
+          {/* Header */}
+          <div style={{textAlign:'center',marginBottom:14,position:'relative'}}>
+            <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice - Your Grocery Shopping Companion</span>
+            <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,top:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
+              <UserIcon/>
+            </button>
+            <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v2.0</span>
+          </div>
+
+          {/* Personalization */}
+          {showPersonalization&&(
+            <div style={{background:'#f9f9f9',border:'1px solid #eee',borderRadius:12,padding:'1rem',marginBottom:14}}>
+              <p style={{fontSize:13,fontWeight:500,color:'#444441',margin:'0 0 8px',fontFamily:ff}}>Personalization</p>
+              <p style={{fontSize:12,color:'#666',margin:'0 0 8px',fontFamily:ff}}>Select 3 currencies for quick switch:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+                {ALL_CURRENCIES.map(c=>{ const sel=selectedCurrencies.includes(c); return <button key={c} onClick={()=>toggleCurrencySelection(c)} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:sel?'1px solid #444441':'1px solid #aaa',background:sel?'#444441':'transparent',color:sel?'#fff':'#666',fontFamily:ff}}>{c}</button>; })}
+              </div>
+              <p style={{fontSize:12,color:'#666',margin:'0 0 6px',fontFamily:ff}}>Default display currency:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:displayCurrency===c?'1px solid #444441':'1px solid #aaa',background:displayCurrency===c?'#444441':'transparent',color:displayCurrency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
+              </div>
+              <p style={{fontSize:11,color:'#aaa',marginTop:12,marginBottom:0,fontFamily:ff}}>More personalization options coming soon.</p>
+            </div>
+          )}
+
+          {/* Currency + FX strip */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,padding:'8px 12px',background:'#f9f9f9',border:'1px solid #eee',borderRadius:8}}>
+            <span style={{fontSize:12,color:'#666',fontFamily:ff}}>Display:</span>
+            {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{...toggleBtn(displayCurrency===c),padding:'4px 10px',fontSize:12}}>{c}</button>))}
+            <button onClick={fetchFx} disabled={fxLoading} style={{marginLeft:'auto',fontSize:11,padding:'4px 10px',borderRadius:6,border:'1px solid #aaa',background:'transparent',color:'#666',cursor:'pointer',fontFamily:ff}}>{fxLoading?'...':'Rates'}</button>
+            {fxUpdatedLabel&&<span style={{fontSize:10,color:'#aaa',fontFamily:ff}}>{fxUpdatedLabel}</span>}
+          </div>
+          {fxError&&<div style={{fontSize:12,color:'#c0392b',marginBottom:10,fontFamily:ff}}>{fxError}</div>}
+
+          {/* Filters */}
           <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
             <label style={{fontSize:12,color:'#666',whiteSpace:'nowrap',fontFamily:ff}}>View by:</label>
             <select style={{...inp,width:'auto',minWidth:90,background:'#fff'}} value={viewBy} onChange={e=>{setViewBy(e.target.value);setFilterValue('__all__');}}>
@@ -626,31 +661,24 @@ export default function App() {
             <button onClick={handleExport} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}>Export</button>
             <label style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}>Import<input type='file' accept='.json' style={{display:'none'}} onChange={handleImport}/></label>
           </div>
-          {grouped.length===0&&<p style={{color:'#888',fontSize:14,fontFamily:ff}}>No entries yet.</p>}
+
+          {grouped.length===0&&<p style={{color:'#888',fontSize:14,fontFamily:ff}}>No entries yet. Tap + to add your first item.</p>}
+
           {grouped.map(([gk,gEntries])=>{
             const latest=gEntries[0];
-            const entryCurr=latest.currency||'HKD';
-
-            // Obs 4: headline = most recent non-purchased
             const headline=getHeadlineEntry(gEntries);
             const headlineDispNorm=dispNormOf(headline);
             const headlineCurr=headline.currency||'HKD';
             const headlineSymbol=CURRENCY_SYMBOLS[headlineCurr]||headlineCurr;
             const headlineDispPrice=parseFloat(convertPrice(headline.price,headlineCurr).toFixed(2));
-
-            // Obs 4: historical low note
             const histLow=getHistoricalLow(gEntries,headlineDispNorm);
-
-            // Obs 2+5: competition by item name, latest per brand+store, matching unit type
             const comp=competitionInfo(latest.name,headlineDispNorm,headline.unit);
-
-            // Obs 6: summary rows = 2nd and 3rd most recent (index 1 and 2)
             const summaryRows=gEntries.slice(1,3);
             const moreCount=gEntries.length>3?gEntries.length-3:0;
 
             return (
               <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',border:'1px solid '+(comp?.isLowest?'#a8d5b5':'#ddd'),borderRadius:12,padding:'12px 16px',marginBottom:10}}>
-                {/* Card headline — not tappable */}
+                {/* Headline */}
                 <div>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
                     <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{latest.name}</span>
@@ -668,32 +696,24 @@ export default function App() {
                   {latest.pricingType==='bundle'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4,marginLeft:4}}>bundle x{latest.bundleQty}</span>}
                   {latest.pricingType==='buyxgety'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4,marginLeft:4}}>buy {latest.buyX} get {latest.getY} free</span>}
 
-                  {/* Headline price row */}
                   <div style={{display:'flex',gap:16,marginTop:6,flexWrap:'wrap',fontSize:13,fontFamily:ff,alignItems:'center'}}>
                     <span><span style={{color:'#888'}}>Price: </span>{headlineCurr===displayCurrency?headlineSymbol+headline.price.toFixed(2):headlineSymbol+headline.price.toFixed(2)+' ('+currSymbol+headlineDispPrice+')'}</span>
                     <span><span style={{color:'#888'}}>Size: </span>{headline.qty}{headline.unit}</span>
                     {headlineDispNorm!=null&&(
-                      <span style={{display:'flex',alignItems:'center',gap:4,color:'#1a73e8',fontWeight:500}}>
-                        {currSymbol}{headlineDispNorm} {headline.normLabel}
-                      </span>
+                      <span style={{color:'#1a73e8',fontWeight:500}}>{currSymbol}{headlineDispNorm} {headline.normLabel}</span>
                     )}
                   </div>
-
-                  {/* Obs 4: historical low note */}
-                  {histLow&&(
-                    <div style={{fontSize:11,color:'#888',marginTop:4,fontFamily:ff}}>
-                      Record Low: {currSymbol}{histLow.dn} · {histLow.date}
-                    </div>
-                  )}
-
-                  {/* Obs 2: competition info */}
+                  {histLow&&<div style={{fontSize:11,color:'#888',marginTop:4,fontFamily:ff}}>Record Low: {currSymbol}{histLow.dn} · {histLow.date}</div>}
                   {comp&&!comp.isLowest&&<div style={{fontSize:11,color:'#888',marginTop:2,fontFamily:ff}}>Cheaper: {comp.cheapestLabel} at {currSymbol}{comp.minNorm.toFixed(1)} {headline.normLabel}</div>}
                   {comp?.isLowest&&<div style={{fontSize:11,color:'#1e7e34',marginTop:2,fontFamily:ff}}>Best price among stores</div>}
                 </div>
 
-                {/* Obs 6: summary table — always visible for 2+ records, no click needed, note shown as subtle indicator */}
+                {/* Summary table — tappable → detail */}
                 {summaryRows.length>0&&(
-                  <div style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8}}>
+                  <div
+                    onClick={()=>navigateToDetail(gk)}
+                    style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer'}}
+                  >
                     <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff,tableLayout:'fixed'}}>
                       <colgroup>
                         <col style={{width:'28%'}}/>
@@ -726,52 +746,281 @@ export default function App() {
               </div>
             );
           })}
+
+          {/* Floating + button */}
+          <button
+            onClick={()=>{ setForm(EMPTY); setEditId(null); setView('add'); }}
+            style={{
+              position:'fixed',bottom:28,right:24,
+              width:52,height:52,borderRadius:26,
+              background:'#444441',color:'#fff',
+              border:'none',cursor:'pointer',
+              display:'flex',alignItems:'center',justifyContent:'center',
+              boxShadow:'0 4px 16px rgba(0,0,0,0.18)',
+              zIndex:200,
+            }}
+          >
+            <PlusIcon/>
+          </button>
         </div>
       )}
 
-      {/* ANALYSIS */}
-      {tab==='chart'&&(
+      {/* ── ADD / EDIT VIEW ── */}
+      {view==='add'&&(
         <div>
-          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
-            <label style={{fontSize:12,color:'#666',whiteSpace:'nowrap',fontFamily:ff}}>View by:</label>
-            <select style={{...inp,width:'auto',minWidth:90}} value={viewBy} onChange={e=>{setViewBy(e.target.value);setFilterValue('__all__');}}>
-              <option value='item'>Item</option>
-              <option value='brand'>Brand</option>
-              <option value='store'>Store</option>
-            </select>
-            <label style={{fontSize:12,color:'#666',whiteSpace:'nowrap',fontFamily:ff}}>Filter:</label>
-            <select style={{...inp,width:'auto',minWidth:110,flex:1}} value={filterValue} onChange={e=>setFilterValue(e.target.value)}>
-              <option value='__all__'>All</option>
-              {filterOptions.map(n=><option key={n} value={n}>{n}</option>)}
-            </select>
+          <BackStrip onBack={handleCancel}/>
+          <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'1.25rem'}}>
+            <p style={{fontSize:13,color:editId?'#1a73e8':'#444441',marginBottom:12,marginTop:0,fontFamily:ff}}>
+              {editId?'Editing existing record':'New Entry'}
+            </p>
+
+            <div style={{marginBottom:12}}>
+              {lbl('Item name',true)}
+              <AutocompleteInput value={form.name} onChange={v=>setF('name',v)} suggestions={itemNames} placeholder='Type or select a previous item' style={inp}/>
+            </div>
+            {field(<>
+              <div>{lbl('Brand')}<AutocompleteInput value={form.brand} onChange={v=>setF('brand',v)} suggestions={brandNames} placeholder='e.g. Quaker' style={inp}/></div>
+              <div>{lbl('Store')}<AutocompleteInput value={form.store} onChange={v=>setF('store',v)} suggestions={storeNames} placeholder='e.g. Walmart' style={inp}/></div>
+            </>,'1fr 1fr')}
+            <div style={{marginBottom:12}}>
+              {lbl('Category tag')}
+              <AutocompleteInput value={form.tag} onChange={v=>setF('tag',v)} suggestions={userTags} placeholder='e.g. Dry Goods (optional, private)' style={inp}/>
+            </div>
+
+            <div style={{marginBottom:12}}>
+              {lbl('Pricing type',true)}
+              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                {[{key:'single',label:'Single'},{key:'bundle',label:'Bundle'},{key:'buyxgety',label:'Buy X Get Y Free'}].map(t=>(
+                  <button key={t.key} onClick={()=>setF('pricingType',t.key)} style={{padding:'7px 16px',fontSize:13,cursor:'pointer',borderRadius:8,border:form.pricingType===t.key?'1px solid #444441':'1px solid #aaa',background:form.pricingType===t.key?'#444441':'transparent',color:form.pricingType===t.key?'#fff':'#666',fontFamily:ff}}>{t.label}</button>
+                ))}
+                <button onClick={()=>setMixedBundleMsg(m=>!m)} style={{padding:'7px 16px',fontSize:13,cursor:'not-allowed',borderRadius:8,border:'1px solid #ddd',background:'#f5f5f5',color:'#bbb',fontFamily:ff}}>Mixed Bundle</button>
+                <label style={{display:'flex',alignItems:'center',gap:6,marginLeft:8,fontSize:13,color:'#666',cursor:'pointer',fontFamily:ff}}>
+                  <input type='checkbox' checked={form.purchased} onChange={e=>setF('purchased',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
+                  Purchased?
+                </label>
+              </div>
+              {mixedBundleMsg&&<p style={{fontSize:12,color:'#aaa',margin:'6px 0 0',fontFamily:ff}}>This feature is under development.</p>}
+            </div>
+
+            <div style={{marginBottom:12}}>
+              {lbl('Currency')}
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {ALL_CURRENCIES.map(c=>(<button key={c} onClick={()=>setF('currency',c)} style={{padding:'6px 12px',fontSize:12,cursor:'pointer',borderRadius:8,border:form.currency===c?'1px solid #444441':'1px solid #aaa',background:form.currency===c?'#444441':'transparent',color:form.currency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
+              </div>
+            </div>
+
+            {form.pricingType==='single'&&(
+              field(<>
+                <div>{lbl('Price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 4.99'/></div>
+                <div>{lbl('Original / listed price')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origPrice} onChange={v=>setF('origPrice',v)} placeholder='e.g. 6.99 (optional)'/></div>
+              </>,'1fr 1fr')
+            )}
+            {form.pricingType==='bundle'&&(
+              <div style={{background:'#f9f9f9',border:'1px solid #ddd',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
+                {field(<>
+                  <div>{lbl('Total bundle price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 9.99'/></div>
+                  <div>{lbl('Packs in bundle',true)}<ClearableInput style={inp} type='number' min='2' step='1' value={form.bundleQty} onChange={v=>setF('bundleQty',v)} placeholder='e.g. 2'/></div>
+                </>,'1fr 1fr')}
+                {form.price&&form.bundleQty&&<p style={{fontSize:12,color:'#666',margin:'4px 0 8px',fontFamily:ff}}>Price per pack: {CURRENCY_SYMBOLS[form.currency]||form.currency}{(parseFloat(form.price)/parseFloat(form.bundleQty)).toFixed(2)}</p>}
+                <div>{lbl('Original unit price (optional)')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 6.99 per pack'/></div>
+              </div>
+            )}
+            {form.pricingType==='buyxgety'&&(
+              <div style={{background:'#f9f9f9',border:'1px solid #ddd',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
+                {field(<>
+                  <div>{lbl('Regular unit price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 15.00'/></div>
+                  <div>{lbl('Original unit price (optional)')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 18.00'/></div>
+                </>,'1fr 1fr')}
+                {field(<>
+                  <div>{lbl('Buy (X)',true)}<ClearableInput style={inp} type='number' min='1' step='1' value={form.buyX} onChange={v=>setF('buyX',v)} placeholder='e.g. 3'/></div>
+                  <div>{lbl('Get free (Y)',true)}<ClearableInput style={inp} type='number' min='1' step='1' value={form.getY} onChange={v=>setF('getY',v)} placeholder='e.g. 1'/></div>
+                </>,'1fr 1fr')}
+                {form.price&&form.buyX&&form.getY&&(
+                  <p style={{fontSize:12,color:'#666',margin:'4px 0 0',fontFamily:ff}}>
+                    Effective price per unit: {CURRENCY_SYMBOLS[form.currency]||form.currency}{((parseFloat(form.buyX)*parseFloat(form.price))/(parseFloat(form.buyX)+parseFloat(form.getY))).toFixed(2)}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {field(<>
+              <div>{lbl('Package size',true)}<ClearableInput style={inp} type='number' min='0' step='any' value={form.qty} onChange={v=>setF('qty',v)} placeholder='e.g. 500'/></div>
+              <div>{lbl('Unit',true)}
+                <select style={{...inp,height:'36px'}} value={form.unit} onChange={e=>setF('unit',e.target.value)}>
+                  {UNIT_GROUPS.map(g=>(<optgroup key={g.label} label={g.label}>{g.units.map(u=><option key={u} value={u}>{u}</option>)}</optgroup>))}
+                </select>
+              </div>
+            </>,'1fr 1fr')}
+
+            {norm&&(
+              <div style={{background:'#e8f0fe',border:'1px solid #aac4f5',borderRadius:8,padding:'9px 14px',marginBottom:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:12,color:'#1a73e8',fontFamily:ff}}>Normalized ({form.currency}):</span>
+                  <span style={{fontSize:16,fontWeight:500,color:'#1a73e8',fontFamily:ff}}>{CURRENCY_SYMBOLS[form.currency]||form.currency}{norm.normalized.toFixed(1)}<span style={{fontSize:12,fontWeight:400}}> {norm.label}</span></span>
+                </div>
+                {form.currency!==displayCurrency&&fxRates&&(
+                  <div style={{fontSize:12,color:'#555',marginTop:4,fontFamily:ff}}>approx {currSymbol}{convertPrice(norm.normalized,form.currency).toFixed(1)} {norm.label} ({displayCurrency})</div>
+                )}
+              </div>
+            )}
+            {discountInfo&&(
+              <div style={{background:discountInfo.isHigher?'#fdecea':'#e6f4ea',border:'1px solid',borderColor:discountInfo.isHigher?'#f5c6c6':'#a8d5b5',borderRadius:8,padding:'8px 12px',fontSize:13,color:discountInfo.isHigher?'#c0392b':'#1e7e34',marginBottom:12,fontFamily:ff}}>
+                {discountInfo.isHigher?'Current price is HIGHER than the original listed price!':'Actual discount: '+discountInfo.advertised+'% lower than listed'}
+              </div>
+            )}
+            <div style={{marginBottom:12}}>{lbl('Note')}<ClearableInput style={inp} value={form.note} onChange={v=>setF('note',v)} placeholder='Optional note'/></div>
+            {field(<><div>{lbl('Price date')}<input style={inp} type='date' value={form.priceDate} onChange={e=>setF('priceDate',e.target.value)}/></div></>)}
+            <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+              <button onClick={handleCancel} style={{padding:'9px 20px',background:'transparent',color:'#666',border:'1px solid #aaa',borderRadius:8,fontSize:14,cursor:'pointer',fontFamily:ff}}>Cancel</button>
+              <button onClick={handleSave} style={{padding:'9px 20px',background:'#444441',color:'#fff',border:'1px solid #444441',borderRadius:8,fontSize:14,cursor:'pointer',fontWeight:500,fontFamily:ff}}>{editId?'Update':'Save'}</button>
+            </div>
           </div>
-          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
-            <label style={{fontSize:12,color:'#666',whiteSpace:'nowrap',fontFamily:ff}}>Tag:</label>
-            <select style={{...inp,width:'auto',minWidth:110,flex:1}} value={filterTag} onChange={e=>setFilterTag(e.target.value)}>
-              <option value='__all__'>All tags</option>
-              {userTags.filter(t=>entries.some(e=>e.tag===t)).map(t=><option key={t} value={t}>{t}</option>)}
-            </select>
+        </div>
+      )}
+
+      {/* ── DETAIL VIEW ── */}
+      {view==='detail'&&detailEntries.length>0&&(()=>{
+        const gEntries=detailEntries;
+        const banner=bannerContent(gEntries);
+        const headline=gEntries[0];
+
+        return (
+          <div>
+            <BackStrip onBack={navigateToRecord}/>
+
+            {/* Pillar 1: Fixed banner — tap → viz */}
+            <div
+              onClick={()=>navigateToViz(headline.name)}
+              style={{
+                height:detailBannerHeight,
+                background:'#f0faf4',
+                border:'1px solid #a8d5b5',
+                borderRadius:12,
+                padding:'10px 16px',
+                marginBottom:12,
+                cursor:'pointer',
+                display:'flex',
+                flexDirection:'column',
+                justifyContent:'center',
+                gap:3,
+              }}
+            >
+              <div style={{fontSize:12,fontWeight:500,color:'#1e7e34',fontFamily:ff,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{banner.line1}</div>
+              {banner.line2&&<div style={{fontSize:12,color:'#444',fontFamily:ff,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{banner.line2}</div>}
+              {banner.line3&&<div style={{fontSize:11,color:'#888',fontFamily:ff,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{banner.line3}</div>}
+              <div style={{fontSize:10,color:'#aaa',fontFamily:ff,marginTop:2}}>Tap to view price chart →</div>
+            </div>
+
+            {/* Pillar 2: Item name + details */}
+            <div style={{marginBottom:12,padding:'10px 16px',background:'#fff',border:'1px solid #eee',borderRadius:12}}>
+              <div style={{fontWeight:600,fontSize:16,fontFamily:ff,marginBottom:4}}>{headline.name}</div>
+              <div style={{fontSize:12,color:'#888',fontFamily:ff,display:'flex',gap:12,flexWrap:'wrap'}}>
+                {headline.store&&<span>Store: {headline.store}</span>}
+                {headline.brand&&<span>Brand: {headline.brand}</span>}
+                {headline.tag&&<span>Tag: {headline.tag}</span>}
+              </div>
+            </div>
+
+            {/* Pillar 3: Price history table */}
+            <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'12px 16px'}}>
+              <div style={{fontSize:11,color:'#aaa',fontFamily:ff,marginBottom:8}}>Price history · {gEntries.length} records</div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff,tableLayout:'fixed'}}>
+                <colgroup>
+                  <col style={{width:'22%'}}/>
+                  <col style={{width:'28%'}}/>
+                  <col style={{width:'22%'}}/>
+                  <col style={{width:'18%'}}/>
+                  <col style={{width:'10%'}}/>
+                </colgroup>
+                <thead>
+                  <tr style={{borderBottom:'1px solid #eee'}}>
+                    <th style={{padding:'4px 6px 8px 0',textAlign:'left',fontSize:11,color:'#aaa',fontWeight:400}}>Date</th>
+                    <th style={{padding:'4px 6px 8px',textAlign:'left',fontSize:11,color:'#aaa',fontWeight:400}}>Note</th>
+                    <th style={{padding:'4px 6px 8px',textAlign:'right',fontSize:11,color:'#aaa',fontWeight:400}}>Price</th>
+                    <th style={{padding:'4px 0 8px 6px',textAlign:'right',fontSize:11,color:'#aaa',fontWeight:400}}>Norm.</th>
+                    <th style={{padding:'4px 0 8px 6px',textAlign:'right',fontSize:11,color:'#aaa',fontWeight:400}}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gEntries.map(e=>{
+                    const eCurr=e.currency||'HKD';
+                    const eSymbol=CURRENCY_SYMBOLS[eCurr]||eCurr;
+                    const eDn=dispNormOf(e);
+                    const isLow=isHistoricalLowEntry(e,gEntries);
+                    return (
+                      <tr key={e.id} style={{background:isLow?'#edfbf3':'transparent',borderBottom:'1px solid #f5f5f5'}}>
+                        <td style={{padding:'6px 6px 6px 0',color:'#666',whiteSpace:'nowrap',overflow:'hidden'}}>
+                          {e.date}{e.purchased&&<span style={{marginLeft:4,display:'inline-flex',verticalAlign:'middle'}}><BagIcon size={11} color='#aaa'/></span>}
+                        </td>
+                        <td style={{padding:'6px',color:'#999',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.note||''}</td>
+                        <td style={{padding:'6px',textAlign:'right',color:'#444',whiteSpace:'nowrap',overflow:'hidden',fontSize:11}}>{eSymbol}{e.price.toFixed(2)}</td>
+                        <td style={{padding:'6px 0 6px 6px',textAlign:'right',color:'#1a73e8',fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',fontSize:11}}>{eDn!=null?currSymbol+eDn:'—'}</td>
+                        <td style={{padding:'6px 0 6px 6px',textAlign:'right',whiteSpace:'nowrap'}}>
+                          <button onClick={()=>handleEdit(e,true)} style={{fontSize:10,padding:'2px 6px',border:'1px solid #ddd',borderRadius:4,background:'transparent',color:'#888',cursor:'pointer',fontFamily:ff}}>Edit</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div style={{marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,borderTop:'1px solid #f0f0f0',paddingTop:12}}>
+                <button onClick={()=>handleDuplicate(gEntries[0])} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Duplicate latest</button>
+                <button
+                  onClick={()=>{
+                    if(window.confirm('Delete all '+gEntries.length+' records for this item?')){
+                      setEntries(prev=>prev.filter(x=>groupKey(x)!==detailKey));
+                      navigateToRecord();
+                    }
+                  }}
+                  style={{fontSize:12,padding:'5px 14px',border:'1px solid #ddd',borderRadius:6,background:'transparent',color:'#c0392b',cursor:'pointer',fontFamily:ff}}
+                >Delete all</button>
+              </div>
+            </div>
           </div>
-          <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center'}}>
-            <span style={{fontSize:12,color:'#666',fontFamily:ff}}>Group by:</span>
-            {['item','brand','store'].map(g=>(<button key={g} onClick={()=>setChartGroupBy(g)} style={{...toggleBtn(chartGroupBy===g),textTransform:'capitalize'}}>{g}</button>))}
+        );
+      })()}
+
+      {/* ── VISUALIZATION VIEW ── */}
+      {view==='viz'&&(
+        <div>
+          <BackStrip onBack={()=>setView('detail')}/>
+
+          <div style={{marginBottom:12}}>
+            <div style={{fontWeight:600,fontSize:16,fontFamily:ff,marginBottom:4}}>{vizItemName}</div>
+            <div style={{fontSize:12,color:'#888',fontFamily:ff}}>Normalized price over time</div>
           </div>
-          {chartData.length===0
+
+          {/* Store filter */}
+          {vizStores.length>1&&(
+            <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
+              <span style={{fontSize:12,color:'#666',fontFamily:ff}}>Store:</span>
+              <button onClick={()=>setVizStoreFilter('__all__')} style={{...toggleBtn(vizStoreFilter==='__all__')}}>All</button>
+              {vizStores.map(s=>(<button key={s} onClick={()=>setVizStoreFilter(s)} style={{...toggleBtn(vizStoreFilter===s)}}>{s}</button>))}
+            </div>
+          )}
+
+          {/* Currency strip */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,padding:'8px 12px',background:'#f9f9f9',border:'1px solid #eee',borderRadius:8}}>
+            <span style={{fontSize:12,color:'#666',fontFamily:ff}}>Display:</span>
+            {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{...toggleBtn(displayCurrency===c),padding:'4px 10px',fontSize:12}}>{c}</button>))}
+          </div>
+
+          {vizChartData.length===0
             ? <p style={{color:'#888',fontSize:14,fontFamily:ff}}>No data to display.</p>
             : <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'1rem'}}>
                 <div style={{display:'flex',flexWrap:'wrap',gap:12,marginBottom:12}}>
-                  {chartKeys.map((k,i)=>(<span key={k} style={{display:'flex',alignItems:'center',gap:5,fontSize:12,color:'#666',fontFamily:ff}}><span style={{width:10,height:10,borderRadius:2,background:COLORS[i%COLORS.length],display:'inline-block'}}></span>{k}</span>))}
+                  {vizChartKeys.map((k,i)=>(<span key={k} style={{display:'flex',alignItems:'center',gap:5,fontSize:12,color:'#666',fontFamily:ff}}><span style={{width:10,height:10,borderRadius:2,background:COLORS[i%COLORS.length],display:'inline-block'}}></span>{k}</span>))}
                 </div>
                 <ResponsiveContainer width='100%' height={300}>
-                  <LineChart data={chartData} margin={{top:5,right:10,left:0,bottom:5}}>
+                  <LineChart data={vizChartData} margin={{top:5,right:10,left:0,bottom:5}}>
                     <CartesianGrid strokeDasharray='3 3' stroke='rgba(128,128,128,0.15)'/>
                     <XAxis dataKey='date' tick={{fontSize:11,fontFamily:ff}}/>
-                    <YAxis tick={{fontSize:11,fontFamily:ff}} tickFormatter={v=>currSymbol+v.toFixed(1)} width={62} domain={[chartMin,'auto']}/>
-                    <Tooltip content={<CustomTooltip currSymbol={currSymbol} entries={chartSrc} chartGroupBy={chartGroupBy}/>}/>
-                    {chartKeys.map((k,i)=>(<Line key={k} type='monotone' dataKey={k} stroke={COLORS[i%COLORS.length]} strokeWidth={2} dot={{r:4}} activeDot={{r:6}} connectNulls={false}/>))}
+                    <YAxis tick={{fontSize:11,fontFamily:ff}} tickFormatter={v=>currSymbol+v.toFixed(1)} width={62} domain={[vizChartMin,'auto']}/>
+                    <Tooltip content={<CustomTooltip currSymbol={currSymbol} entries={vizEntries} chartGroupBy='store'/>}/>
+                    {vizChartKeys.map((k,i)=>(<Line key={k} type='monotone' dataKey={k} stroke={COLORS[i%COLORS.length]} strokeWidth={2} dot={{r:4}} activeDot={{r:6}} connectNulls={false}/>))}
                   </LineChart>
                 </ResponsiveContainer>
-                <p style={{fontSize:11,color:'#888',marginTop:8,textAlign:'center',fontFamily:ff}}>Normalized price in {displayCurrency} over time</p>
+                <p style={{fontSize:11,color:'#888',marginTop:8,textAlign:'center',fontFamily:ff}}>Normalized price in {displayCurrency}</p>
               </div>
           }
         </div>
