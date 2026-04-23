@@ -1,4 +1,4 @@
-// TruPrice v1.17
+// TruPrice v1.17a
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -443,7 +443,7 @@ export default function App() {
         <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
           <UserIcon/>
         </button>
-        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v1.17</span>
+        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v1.17a</span>
       </div>
 
       {showPersonalization&&(
@@ -693,20 +693,25 @@ export default function App() {
                 {/* Obs 6: summary table — always visible for 2+ records, no click needed, note shown as subtle indicator */}
                 {summaryRows.length>0&&(
                   <div style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8}}>
-                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff,tableLayout:'fixed'}}>
+                      <colgroup>
+                        <col style={{width:'28%'}}/>
+                        <col style={{width:'42%'}}/>
+                        <col style={{width:'30%'}}/>
+                      </colgroup>
                       <tbody>
                         {summaryRows.map(e=>{
                           const eDn=dispNormOf(e);
                           const isLow=isHistoricalLowEntry(e,gEntries);
                           return (
                             <tr key={e.id} style={{background:isLow?'#edfbf3':'transparent'}}>
-                              <td style={{padding:'4px 6px 4px 0',color:'#666',whiteSpace:'nowrap'}}>
+                              <td style={{padding:'4px 6px 4px 0',color:'#666',whiteSpace:'nowrap',overflow:'hidden'}}>
                                 {e.date}{e.purchased&&<span style={{marginLeft:4,display:'inline-flex',verticalAlign:'middle'}}><BagIcon size={11} color='#aaa'/></span>}
                               </td>
-                              <td style={{padding:'4px 6px',color:'#bbb',fontSize:11,textAlign:'center'}}>
-                                {e.note?'✎':''}
+                              <td style={{padding:'4px 6px',color:'#aaa',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                {e.note||''}
                               </td>
-                              <td style={{padding:'4px 0 4px 6px',textAlign:'right',color:'#1a73e8',fontWeight:500,whiteSpace:'nowrap'}}>
+                              <td style={{padding:'4px 0 4px 6px',textAlign:'right',color:'#1a73e8',fontWeight:500,whiteSpace:'nowrap',overflow:'hidden'}}>
                                 {eDn!=null?currSymbol+eDn+' '+(e.normLabel||''):'—'}
                               </td>
                             </tr>
@@ -714,7 +719,7 @@ export default function App() {
                         })}
                       </tbody>
                     </table>
-                    {moreCount>0&&<div style={{fontSize:11,color:'#aaa',marginTop:4,textAlign:'right',fontFamily:ff}}>and {moreCount} more...</div>}
+                    {moreCount>0&&<div style={{fontSize:11,color:'#888',marginTop:4,textAlign:'right',fontFamily:ff,textDecoration:'underline',cursor:'pointer'}}>and {moreCount} more...</div>}
                   </div>
                 )}
               </div>
