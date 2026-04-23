@@ -1,4 +1,4 @@
-// TruPrice v1.17a
+// TruPrice v1.17b
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -443,7 +443,7 @@ export default function App() {
         <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
           <UserIcon/>
         </button>
-        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v1.17a</span>
+        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v1.17b</span>
       </div>
 
       {showPersonalization&&(
@@ -654,7 +654,9 @@ export default function App() {
                 <div>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
                     <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{latest.name}</span>
-                    <span style={{fontSize:12,color:'#888',fontFamily:ff,whiteSpace:'nowrap'}}>{latest.date}</span>
+                    <span style={{fontSize:12,color:'#888',fontFamily:ff,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:4}}>
+                      {latest.date}{headline.purchased&&<BagIcon size={11} color='#aaa'/>}
+                    </span>
                   </div>
                   {(latest.store||latest.brand)&&(
                     <div style={{fontSize:11,color:'#999',fontFamily:ff,marginTop:2,display:'flex',gap:12}}>
@@ -673,7 +675,6 @@ export default function App() {
                     {headlineDispNorm!=null&&(
                       <span style={{display:'flex',alignItems:'center',gap:4,color:'#1a73e8',fontWeight:500}}>
                         {currSymbol}{headlineDispNorm} {headline.normLabel}
-                        {headline.purchased&&<BagIcon size={13} color='#1a73e8'/>}
                       </span>
                     )}
                   </div>
