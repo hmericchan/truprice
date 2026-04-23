@@ -158,7 +158,6 @@ export default function App() {
   const [filterTag,setFilterTag] = useState('__all__');
   const [chartGroupBy,setChartGroupBy] = useState('store');
   const [showPersonalization,setShowPersonalization] = useState(false);
-  const [expandedKey,setExpandedKey] = useState(null);
   const [prefs,setPrefs] = useState(loadPrefs);
   const [mixedBundleMsg,setMixedBundleMsg] = useState(false);
 
@@ -444,7 +443,7 @@ export default function App() {
         <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
           <UserIcon/>
         </button>
-        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v2.0</span>
+        <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v1.17</span>
       </div>
 
       {showPersonalization&&(
@@ -649,8 +648,6 @@ export default function App() {
             const summaryRows=gEntries.slice(1,3);
             const moreCount=gEntries.length>3?gEntries.length-3:0;
 
-            const isExpanded=expandedKey===gk;
-
             return (
               <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',border:'1px solid '+(comp?.isLowest?'#a8d5b5':'#ddd'),borderRadius:12,padding:'12px 16px',marginBottom:10}}>
                 {/* Card headline — not tappable */}
@@ -693,12 +690,9 @@ export default function App() {
                   {comp?.isLowest&&<div style={{fontSize:11,color:'#1e7e34',marginTop:2,fontFamily:ff}}>Best price among stores</div>}
                 </div>
 
-                {/* Obs 6: summary table — always visible for 2+ records, tappable → expand (placeholder for Pass 2 detail page) */}
+                {/* Obs 6: summary table — always visible for 2+ records, no click needed, note shown as subtle indicator */}
                 {summaryRows.length>0&&(
-                  <div
-                    onClick={()=>setExpandedKey(isExpanded?null:gk)}
-                    style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer'}}
-                  >
+                  <div style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8}}>
                     <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff}}>
                       <tbody>
                         {summaryRows.map(e=>{
@@ -709,8 +703,8 @@ export default function App() {
                               <td style={{padding:'4px 6px 4px 0',color:'#666',whiteSpace:'nowrap'}}>
                                 {e.date}{e.purchased&&<span style={{marginLeft:4,display:'inline-flex',verticalAlign:'middle'}}><BagIcon size={11} color='#aaa'/></span>}
                               </td>
-                              <td style={{padding:'4px 6px',color:'#1a73e8',fontSize:11}}>
-                                {e.note?'See detail':''}
+                              <td style={{padding:'4px 6px',color:'#bbb',fontSize:11,textAlign:'center'}}>
+                                {e.note?'✎':''}
                               </td>
                               <td style={{padding:'4px 0 4px 6px',textAlign:'right',color:'#1a73e8',fontWeight:500,whiteSpace:'nowrap'}}>
                                 {eDn!=null?currSymbol+eDn+' '+(e.normLabel||''):'—'}
@@ -721,48 +715,6 @@ export default function App() {
                       </tbody>
                     </table>
                     {moreCount>0&&<div style={{fontSize:11,color:'#aaa',marginTop:4,textAlign:'right',fontFamily:ff}}>and {moreCount} more...</div>}
-                  </div>
-                )}
-
-                {/* Expanded detail (legacy, to be replaced by detail page in Pass 2) */}
-                {isExpanded&&(
-                  <div style={{marginTop:10,borderTop:'1px solid #eee',paddingTop:10}}>
-                    <div style={{marginBottom:8}}>
-                      <div style={{fontSize:11,color:'#aaa',fontFamily:ff,marginBottom:6}}>All records</div>
-                      {gEntries.map(e=>{
-                        const eCurr=e.currency||'HKD';
-                        const eSymbol=CURRENCY_SYMBOLS[eCurr]||eCurr;
-                        const eDn=dispNormOf(e);
-                        const isLow=isHistoricalLowEntry(e,gEntries);
-                        return (
-                          <div key={e.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #f5f5f5',fontSize:12,fontFamily:ff,background:isLow?'#edfbf3':'transparent',borderRadius:isLow?4:0}}>
-                            <div style={{flex:1,minWidth:0}}>
-                              <span style={{color:'#666'}}>{e.date}</span>
-                              {e.purchased&&<span style={{marginLeft:6,display:'inline-flex',alignItems:'center'}}><BagIcon size={11} color='#aaa'/></span>}
-                              {e.note&&<span style={{color:'#aaa',marginLeft:6,fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'inline-block',maxWidth:120}}>{e.note}</span>}
-                            </div>
-                            <div style={{textAlign:'right',flexShrink:0}}>
-                              <span style={{color:'#444'}}>{eSymbol}{e.price.toFixed(2)}</span>
-                              {eDn!=null&&<span style={{color:'#1a73e8',marginLeft:8}}>{currSymbol}{eDn} {e.normLabel}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {latest.origPrice&&(
-                      <div style={{fontSize:12,marginBottom:6,color:latest.price>latest.origPrice?'#c0392b':'#888',fontFamily:ff}}>
-                        {'Listed: '+(CURRENCY_SYMBOLS[latest.currency]||latest.currency)+latest.origPrice+' - Observed: '+(CURRENCY_SYMBOLS[latest.currency]||latest.currency)+latest.price.toFixed(2)}
-                        {latest.price>latest.origPrice&&' - higher than listed!'}
-                        {latest.price<latest.origPrice&&' - '+(((latest.origPrice-latest.price)/latest.origPrice)*100).toFixed(1)+'% lower'}
-                      </div>
-                    )}
-                    <div style={{marginTop:10,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                      <div style={{display:'flex',gap:8}}>
-                        <button onClick={()=>handleEdit(latest)} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Edit latest</button>
-                        <button onClick={()=>handleDuplicate(latest)} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Duplicate</button>
-                      </div>
-                      <button onClick={()=>{ if(window.confirm('Delete all '+gEntries.length+' records for this item?')) setEntries(prev=>prev.filter(x=>groupKey(x)!==gk)); }} style={{fontSize:12,padding:'5px 14px',border:'1px solid #ddd',borderRadius:6,background:'transparent',color:'#aaa',cursor:'pointer',fontFamily:ff}}>Delete all</button>
-                    </div>
                   </div>
                 )}
               </div>
