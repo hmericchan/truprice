@@ -1,4 +1,4 @@
-// TruPrice v2.0
+// TruPrice v2.0a
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -97,11 +97,126 @@ function PlusIcon() {
   );
 }
 
-function ChevronLeft() {
+function HomeIcon() {
   return (
-    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
-      <polyline points='15 18 9 12 15 6'/>
+    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+      <path d='M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z'/>
+      <polyline points='9 22 9 12 15 12 15 22'/>
     </svg>
+  );
+}
+
+function NewIcon() {
+  return (
+    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round'>
+      <line x1='12' y1='5' x2='12' y2='19'/>
+      <line x1='5' y1='12' x2='19' y2='12'/>
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+      <circle cx='12' cy='12' r='3'/>
+      <path d='M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z'/>
+    </svg>
+  );
+}
+
+function DetailIcon() {
+  return (
+    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+      <path d='M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z'/>
+      <polyline points='14 2 14 8 20 8'/>
+      <line x1='16' y1='13' x2='8' y2='13'/>
+      <line x1='16' y1='17' x2='8' y2='17'/>
+    </svg>
+  );
+}
+
+function MenuDotsIcon() {
+  return (
+    <svg width='20' height='20' viewBox='0 0 24 24' fill='currentColor'>
+      <circle cx='5' cy='12' r='2'/>
+      <circle cx='12' cy='12' r='2'/>
+      <circle cx='19' cy='12' r='2'/>
+    </svg>
+  );
+}
+
+// Radial menu: buttons defined by page context
+// buttons: array of { icon, label, onClick, angle } where angle in degrees (0=right, 90=up)
+function RadialMenu({ buttons, onOpenSettings }) {
+  const [open, setOpen] = useState(false);
+  const RADIUS = 72;
+
+  function getPos(angleDeg) {
+    const rad = (angleDeg * Math.PI) / 180;
+    return {
+      x: Math.round(RADIUS * Math.cos(rad)),
+      y: Math.round(RADIUS * Math.sin(rad)),
+    };
+  }
+
+  return (
+    <>
+      {/* Overlay — captures all taps when menu open */}
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 299,
+            background: 'rgba(0,0,0,0.25)',
+          }}
+        />
+      )}
+
+      {/* Radial buttons */}
+      {open && buttons.map((btn, i) => {
+        const pos = getPos(btn.angleDeg);
+        return (
+          <div
+            key={i}
+            onClick={() => { setOpen(false); btn.onClick(); }}
+            style={{
+              position: 'fixed',
+              bottom: 28 - pos.y,
+              right: 24 - pos.x,
+              zIndex: 301,
+              width: 44, height: 44, borderRadius: 22,
+              background: '#fff',
+              border: '1px solid #ddd',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#444441',
+            }}
+            title={btn.label}
+          >
+            {btn.icon}
+          </div>
+        );
+      })}
+
+      {/* Menu trigger button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          position: 'fixed', bottom: 28, right: 24,
+          width: 52, height: 52, borderRadius: 26,
+          background: open ? '#666' : '#444441',
+          color: '#fff',
+          border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          zIndex: 302,
+          transition: 'background 0.15s',
+        }}
+      >
+        <MenuDotsIcon />
+      </button>
+    </>
   );
 }
 
@@ -174,26 +289,6 @@ function CustomTooltip({ active, payload, label, currSymbol, entries, chartGroup
 }
 
 // Left strip back navigation
-function BackStrip({ onBack }) {
-  const [hovered,setHovered] = useState(false);
-  return (
-    <div
-      onClick={onBack}
-      onMouseEnter={()=>setHovered(true)}
-      onMouseLeave={()=>setHovered(false)}
-      style={{
-        position:'fixed',left:0,top:0,bottom:0,width:28,
-        display:'flex',alignItems:'center',justifyContent:'center',
-        cursor:'pointer',zIndex:100,
-        background:hovered?'rgba(0,0,0,0.04)':'transparent',
-        transition:'background 0.15s',
-        userSelect:'none',
-      }}
-    >
-      <ChevronLeft/>
-    </div>
-  );
-}
 
 export default function App() {
   const [entries,setEntries] = useState(load);
@@ -576,7 +671,6 @@ export default function App() {
   const fxUpdatedLabel=fxUpdated?new Date(fxUpdated).toLocaleDateString():null;
 
   // responsive max width
-  const isMobile = typeof window!=='undefined'&&window.innerWidth<600;
   const isTablet = typeof window!=='undefined'&&window.innerWidth>=600&&window.innerWidth<1024;
 
   const inp={ padding:'7px 10px',border:'1px solid #aaa',borderRadius:8,background:'#fff',color:'#222',fontSize:14,width:'100%',boxSizing:'border-box',fontFamily:ff };
@@ -584,18 +678,10 @@ export default function App() {
   const field=(children,cols)=>(<div style={{display:'grid',gridTemplateColumns:cols||'1fr',gap:10,marginBottom:12}}>{children}</div>);
   const toggleBtn=active=>({ padding:'5px 14px',fontSize:12,cursor:'pointer',borderRadius:6,border:active?'1px solid #444441':'1px solid #aaa',background:active?'#444441':'transparent',color:active?'#fff':'#666',fontFamily:ff });
 
-  const containerStyle={
-    padding: view==='record'?'1rem 0.75rem':'1rem 0.75rem 1rem 2rem',
-    maxWidth: isTablet?900:'100%',
-    margin:'0 auto',
-    fontFamily:ff,
-    boxSizing:'border-box',
-  };
-
-  const detailBannerHeight=80;
+  const containerPad='1rem 0.75rem';
 
   return (
-    <div style={containerStyle}>
+    <div style={{padding:containerPad,maxWidth:isTablet?900:'100%',margin:'0 auto',fontFamily:ff,boxSizing:'border-box'}}>
       {toast&&<div style={{position:'fixed',top:16,left:'50%',transform:'translateX(-50%)',background:'#fff',border:'1px solid #ccc',borderRadius:8,padding:'10px 20px',fontSize:13,zIndex:999,color:'#222',whiteSpace:'nowrap',fontFamily:ff}}>{toast}</div>}
 
       {/* ── RECORD VIEW ── */}
@@ -768,7 +854,29 @@ export default function App() {
       {/* ── ADD / EDIT VIEW ── */}
       {view==='add'&&(
         <div>
-          <BackStrip onBack={handleCancel}/>
+          {/* Header — same as Record view for seamless transition */}
+          <div style={{textAlign:'center',marginBottom:14,position:'relative'}}>
+            <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice - Your Grocery Shopping Companion</span>
+            <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,top:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
+              <UserIcon/>
+            </button>
+          </div>
+
+          {showPersonalization&&(
+            <div style={{background:'#f9f9f9',border:'1px solid #eee',borderRadius:12,padding:'1rem',marginBottom:14}}>
+              <p style={{fontSize:13,fontWeight:500,color:'#444441',margin:'0 0 8px',fontFamily:ff}}>Personalization</p>
+              <p style={{fontSize:12,color:'#666',margin:'0 0 8px',fontFamily:ff}}>Select 3 currencies for quick switch:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+                {ALL_CURRENCIES.map(c=>{ const sel=selectedCurrencies.includes(c); return <button key={c} onClick={()=>toggleCurrencySelection(c)} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:sel?'1px solid #444441':'1px solid #aaa',background:sel?'#444441':'transparent',color:sel?'#fff':'#666',fontFamily:ff}}>{c}</button>; })}
+              </div>
+              <p style={{fontSize:12,color:'#666',margin:'0 0 6px',fontFamily:ff}}>Default display currency:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:displayCurrency===c?'1px solid #444441':'1px solid #aaa',background:displayCurrency===c?'#444441':'transparent',color:displayCurrency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
+              </div>
+              <p style={{fontSize:11,color:'#aaa',marginTop:12,marginBottom:0,fontFamily:ff}}>More personalization options coming soon.</p>
+            </div>
+          )}
+
           <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'1.25rem'}}>
             <p style={{fontSize:13,color:editId?'#1a73e8':'#444441',marginBottom:12,marginTop:0,fontFamily:ff}}>
               {editId?'Editing existing record':'New Entry'}
@@ -805,7 +913,7 @@ export default function App() {
             <div style={{marginBottom:12}}>
               {lbl('Currency')}
               <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                {ALL_CURRENCIES.map(c=>(<button key={c} onClick={()=>setF('currency',c)} style={{padding:'6px 12px',fontSize:12,cursor:'pointer',borderRadius:8,border:form.currency===c?'1px solid #444441':'1px solid #aaa',background:form.currency===c?'#444441':'transparent',color:form.currency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
+                {selectedCurrencies.map(c=>(<button key={c} onClick={()=>setF('currency',c)} style={{padding:'6px 12px',fontSize:12,cursor:'pointer',borderRadius:8,border:form.currency===c?'1px solid #444441':'1px solid #aaa',background:form.currency===c?'#444441':'transparent',color:form.currency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
               </div>
             </div>
 
@@ -885,120 +993,113 @@ export default function App() {
         const headline=gEntries[0];
 
         return (
-          <div>
-            <BackStrip onBack={navigateToRecord}/>
-
-            {/* Pillar 1: Fixed banner — tap → viz */}
+          <div style={{paddingBottom:80}}>
+            {/* Unified header: item name + store/brand + intelligence summary — fully tappable → viz */}
             <div
               onClick={()=>navigateToViz(headline.name)}
               style={{
-                height:detailBannerHeight,
                 background:'#f0faf4',
                 border:'1px solid #a8d5b5',
                 borderRadius:12,
-                padding:'10px 16px',
+                padding:'12px 16px',
                 marginBottom:12,
                 cursor:'pointer',
-                display:'flex',
-                flexDirection:'column',
-                justifyContent:'center',
-                gap:3,
               }}
             >
-              <div style={{fontSize:12,fontWeight:500,color:'#1e7e34',fontFamily:ff,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{banner.line1}</div>
-              {banner.line2&&<div style={{fontSize:12,color:'#444',fontFamily:ff,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{banner.line2}</div>}
-              {banner.line3&&<div style={{fontSize:11,color:'#888',fontFamily:ff,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{banner.line3}</div>}
-              <div style={{fontSize:10,color:'#aaa',fontFamily:ff,marginTop:2}}>Tap to view price chart →</div>
-            </div>
-
-            {/* Pillar 2: Item name + details */}
-            <div style={{marginBottom:12,padding:'10px 16px',background:'#fff',border:'1px solid #eee',borderRadius:12}}>
-              <div style={{fontWeight:600,fontSize:16,fontFamily:ff,marginBottom:4}}>{headline.name}</div>
-              <div style={{fontSize:12,color:'#888',fontFamily:ff,display:'flex',gap:12,flexWrap:'wrap'}}>
+              <div style={{fontWeight:600,fontSize:16,fontFamily:ff,marginBottom:2}}>{headline.name}</div>
+              <div style={{fontSize:12,color:'#888',fontFamily:ff,display:'flex',gap:12,flexWrap:'wrap',marginBottom:6}}>
                 {headline.store&&<span>Store: {headline.store}</span>}
                 {headline.brand&&<span>Brand: {headline.brand}</span>}
                 {headline.tag&&<span>Tag: {headline.tag}</span>}
               </div>
+              <div style={{fontSize:12,fontWeight:500,color:'#1e7e34',fontFamily:ff}}>{banner.line1}</div>
+              {banner.line2&&<div style={{fontSize:12,color:'#555',fontFamily:ff,marginTop:2}}>{banner.line2}</div>}
+              {banner.line3&&<div style={{fontSize:11,color:'#888',fontFamily:ff,marginTop:2}}>{banner.line3}</div>}
+              <div style={{fontSize:10,color:'#aaa',fontFamily:ff,marginTop:4}}>Tap to view price chart →</div>
             </div>
 
-            {/* Pillar 3: Price history cards */}
-            <div>
-              <div style={{fontSize:11,color:'#aaa',fontFamily:ff,marginBottom:8}}>Price history · {gEntries.length} records</div>
-              {gEntries.map(e=>{
-                const eCurr=e.currency||'HKD';
-                const eSymbol=CURRENCY_SYMBOLS[eCurr]||eCurr;
-                const eDn=dispNormOf(e);
-                const isLow=isHistoricalLowEntry(e,gEntries);
-                return (
-                  <div key={e.id} style={{
-                    background:isLow?'#edfbf3':'#fff',
-                    border:'1px solid '+(isLow?'#a8d5b5':'#ddd'),
-                    borderRadius:10,
-                    padding:'10px 14px',
-                    marginBottom:8,
-                  }}>
-                    {/* Card top row: date + purchased icon + record low badge */}
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6}}>
-                        <span style={{fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{e.date}</span>
-                        {e.purchased&&<BagIcon size={14} color='#888'/>}
-                        {isLow&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:'#1e7e34',color:'#fff',fontFamily:ff}}>Record Low</span>}
-                      </div>
-                      <span style={{fontSize:13,color:'#1a73e8',fontWeight:500,fontFamily:ff}}>{eDn!=null?currSymbol+eDn+' '+(e.normLabel||''):'—'}</span>
+            {/* Price history cards */}
+            <div style={{fontSize:11,color:'#aaa',fontFamily:ff,marginBottom:8}}>Price history · {gEntries.length} records</div>
+            {gEntries.map(e=>{
+              const eCurr=e.currency||'HKD';
+              const eSymbol=CURRENCY_SYMBOLS[eCurr]||eCurr;
+              const eDn=dispNormOf(e);
+              const isLow=isHistoricalLowEntry(e,gEntries);
+              return (
+                <div key={e.id} style={{
+                  background:isLow?'#edfbf3':'#fff',
+                  border:'1px solid '+(isLow?'#a8d5b5':'#ddd'),
+                  borderRadius:10,
+                  padding:'10px 14px',
+                  marginBottom:8,
+                }}>
+                  {/* Date + purchased + record low badge + normalized */}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{e.date}</span>
+                      {e.purchased&&<BagIcon size={14} color='#888'/>}
+                      {isLow&&<span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:'#1e7e34',color:'#fff',fontFamily:ff}}>Record Low</span>}
                     </div>
-                    {/* Price + size */}
-                    <div style={{fontSize:12,color:'#666',fontFamily:ff,marginBottom:e.note?6:0}}>
-                      <span>{eSymbol}{e.price.toFixed(2)}</span>
-                      <span style={{marginLeft:12,color:'#aaa'}}>{e.qty}{e.unit}</span>
-                      {e.pricingType==='bundle'&&<span style={{marginLeft:8,fontSize:11,color:'#b26a00'}}>bundle x{e.bundleQty}</span>}
-                      {e.pricingType==='buyxgety'&&<span style={{marginLeft:8,fontSize:11,color:'#b26a00'}}>buy {e.buyX} get {e.getY} free</span>}
-                    </div>
-                    {/* Note */}
-                    {e.note&&<div style={{fontSize:11,color:'#999',fontFamily:ff,marginBottom:6,fontStyle:'italic'}}>{e.note}</div>}
-                    {/* Actions */}
-                    <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
-                      <button
-                        onClick={()=>handleEdit(e,true)}
-                        style={{fontSize:11,padding:'3px 10px',border:'1px solid '+(isLow?'#a8d5b5':'#ddd'),borderRadius:5,background:'transparent',color:isLow?'#1e7e34':'#888',cursor:'pointer',fontFamily:ff}}
-                      >Edit</button>
-                      <button
-                        onClick={()=>{
-                          if(window.confirm('Delete this record?')){
-                            const remaining=entries.filter(x=>x.id!==e.id);
-                            setEntries(remaining);
-                            const stillExists=remaining.some(x=>groupKey(x)===detailKey);
-                            if(!stillExists) navigateToRecord();
-                          }
-                        }}
-                        style={{fontSize:11,padding:'3px 10px',border:'1px solid #f5c6c6',borderRadius:5,background:'transparent',color:'#c0392b',cursor:'pointer',fontFamily:ff}}
-                      >Delete</button>
-                    </div>
+                    <span style={{fontSize:13,color:'#1a73e8',fontWeight:500,fontFamily:ff}}>{eDn!=null?currSymbol+eDn+' '+(e.normLabel||''):'—'}</span>
                   </div>
-                );
-              })}
-              {/* Group actions */}
-              <div style={{marginTop:8,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
-                <button onClick={()=>handleDuplicate(gEntries[0])} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Duplicate latest</button>
-                <button
-                  onClick={()=>{
-                    if(window.confirm('Delete all '+gEntries.length+' records for this item?')){
-                      setEntries(prev=>prev.filter(x=>groupKey(x)!==detailKey));
-                      navigateToRecord();
-                    }
-                  }}
-                  style={{fontSize:12,padding:'5px 14px',border:'1px solid #ddd',borderRadius:6,background:'transparent',color:'#c0392b',cursor:'pointer',fontFamily:ff}}
-                >Delete all</button>
-              </div>
+                  {/* Price + size + pricing badge + note inline, wrapping freely */}
+                  <div style={{fontSize:12,color:'#666',fontFamily:ff}}>
+                    <span>{eSymbol}{e.price.toFixed(2)}</span>
+                    <span style={{marginLeft:12,color:'#aaa'}}>{e.qty}{e.unit}</span>
+                    {e.pricingType==='bundle'&&<span style={{marginLeft:8,fontSize:11,color:'#b26a00'}}>bundle x{e.bundleQty}</span>}
+                    {e.pricingType==='buyxgety'&&<span style={{marginLeft:8,fontSize:11,color:'#b26a00'}}>buy {e.buyX} get {e.getY} free</span>}
+                    {e.note&&<span style={{marginLeft:8,fontSize:11,color:'#999',fontStyle:'italic'}}>{e.note}</span>}
+                  </div>
+                  {/* Actions */}
+                  <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:8}}>
+                    <button
+                      onClick={()=>handleEdit(e,true)}
+                      style={{fontSize:11,padding:'3px 10px',border:'1px solid '+(isLow?'#a8d5b5':'#ddd'),borderRadius:5,background:'transparent',color:isLow?'#1e7e34':'#888',cursor:'pointer',fontFamily:ff}}
+                    >Edit</button>
+                    <button
+                      onClick={()=>{
+                        if(window.confirm('Delete this record?')){
+                          const remaining=entries.filter(x=>x.id!==e.id);
+                          setEntries(remaining);
+                          const stillExists=remaining.some(x=>groupKey(x)===detailKey);
+                          if(!stillExists) navigateToRecord();
+                        }
+                      }}
+                      style={{fontSize:11,padding:'3px 10px',border:'1px solid #f5c6c6',borderRadius:5,background:'transparent',color:'#c0392b',cursor:'pointer',fontFamily:ff}}
+                    >Delete</button>
+                  </div>
+                </div>
+              );
+            })}
+            {/* Group actions */}
+            <div style={{marginTop:8,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+              <button onClick={()=>handleDuplicate(gEntries[0])} style={{fontSize:12,padding:'5px 14px',border:'1px solid #aaa',borderRadius:6,background:'transparent',color:'#444',cursor:'pointer',fontFamily:ff}}>Duplicate latest</button>
+              <button
+                onClick={()=>{
+                  if(window.confirm('Delete all '+gEntries.length+' records for this item?')){
+                    setEntries(prev=>prev.filter(x=>groupKey(x)!==detailKey));
+                    navigateToRecord();
+                  }
+                }}
+                style={{fontSize:12,padding:'5px 14px',border:'1px solid #ddd',borderRadius:6,background:'transparent',color:'#c0392b',cursor:'pointer',fontFamily:ff}}
+              >Delete all</button>
             </div>
+
+            {/* Radial menu — Detail page */}
+            <RadialMenu
+              buttons={[
+                { icon:<NewIcon/>, label:'New record', angleDeg:180, onClick:()=>{ setForm(EMPTY); setEditId(null); setView('add'); } },
+                { icon:<HomeIcon/>, label:'Back to records', angleDeg:135, onClick:navigateToRecord },
+                { icon:<SettingsIcon/>, label:'Settings', angleDeg:90, onClick:()=>setShowPersonalization(p=>!p) },
+              ]}
+            />
           </div>
         );
       })()}
 
       {/* ── VISUALIZATION VIEW ── */}
       {view==='viz'&&(
-        <div>
-          <BackStrip onBack={()=>setView('detail')}/>
-
+        <div style={{paddingBottom:80}}>
           <div style={{marginBottom:12}}>
             <div style={{fontWeight:600,fontSize:16,fontFamily:ff,marginBottom:4}}>{vizItemName}</div>
             <div style={{fontSize:12,color:'#888',fontFamily:ff}}>Normalized price over time</div>
@@ -1037,6 +1138,15 @@ export default function App() {
                 <p style={{fontSize:11,color:'#888',marginTop:8,textAlign:'center',fontFamily:ff}}>Normalized price in {displayCurrency}</p>
               </div>
           }
+
+          {/* Radial menu — Viz page */}
+          <RadialMenu
+            buttons={[
+              { icon:<DetailIcon/>, label:'Back to details', angleDeg:180, onClick:()=>setView('detail') },
+              { icon:<HomeIcon/>, label:'Back to records', angleDeg:135, onClick:navigateToRecord },
+              { icon:<SettingsIcon/>, label:'Settings', angleDeg:90, onClick:()=>setShowPersonalization(p=>!p) },
+            ]}
+          />
         </div>
       )}
     </div>
