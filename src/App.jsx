@@ -1,4 +1,4 @@
-// TruPrice v2.0c
+// TruPrice v2.0d
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -595,12 +595,17 @@ export default function App() {
       map[k].push(e);
     });
     Object.values(map).forEach(arr=>arr.sort((a,b)=>b.date.localeCompare(a.date)));
-    return Object.entries(map).sort((a,b)=>b[1][0].date.localeCompare(a[1][0].date));
+    // Sort groups: A-Z by item name, then by most recent date within same name
+    return Object.entries(map).sort((a,b)=>{
+      const nameA=a[1][0].name.toLowerCase();
+      const nameB=b[1][0].name.toLowerCase();
+      if(nameA!==nameB) return nameA.localeCompare(nameB);
+      return b[1][0].date.localeCompare(a[1][0].date);
+    });
   },[entries,filterValue,viewBy,filterTag]);
 
   // Section → Category → grouped items structure
   const groupedBySectionCategory = useMemo(()=>{
-    // build section → category → groups map
     const sectionCatMap={};
     grouped.forEach(([gk,gEntries])=>{
       const tag=gEntries[0]?.tag||'';
@@ -612,10 +617,16 @@ export default function App() {
       sectionCatMap[sectionName].categories[catName].push([gk,gEntries]);
     });
 
-    // order sections by SECTION_MAP order, Other last
+    // Sort categories A-Z within each section
     const ordered=[];
     [...SECTION_MAP,SECTION_OTHER].forEach(s=>{
-      if(sectionCatMap[s.name]) ordered.push({ section:s, categories:sectionCatMap[s.name].categories });
+      if(sectionCatMap[s.name]){
+        const sortedCats={};
+        Object.keys(sectionCatMap[s.name].categories).sort((a,b)=>a.localeCompare(b)).forEach(k=>{
+          sortedCats[k]=sectionCatMap[s.name].categories[k];
+        });
+        ordered.push({ section:s, categories:sortedCats });
+      }
     });
     return ordered;
   },[grouped]);
@@ -750,7 +761,14 @@ export default function App() {
           </div>
           {fxError&&<div style={{fontSize:12,color:'#c0392b',marginBottom:10,fontFamily:ff}}>{fxError}</div>}
 
-          {/* Filters */}
+          {/* Filters — Category first, then View by + Filter */}
+          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
+            <label style={{fontSize:12,color:'#666',whiteSpace:'nowrap',fontFamily:ff}}>Category:</label>
+            <select style={{...inp,width:'auto',minWidth:110,flex:1}} value={filterTag} onChange={e=>setFilterTag(e.target.value)}>
+              <option value='__all__'>All categories</option>
+              {userTags.filter(t=>entries.some(e=>e.tag===t)).map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
           <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
             <label style={{fontSize:12,color:'#666',whiteSpace:'nowrap',fontFamily:ff}}>View by:</label>
             <select style={{...inp,width:'auto',minWidth:90,background:'#fff'}} value={viewBy} onChange={e=>{setViewBy(e.target.value);setFilterValue('__all__');}}>
@@ -764,13 +782,6 @@ export default function App() {
               {filterOptions.map(n=><option key={n} value={n}>{n}</option>)}
             </select>
             {grouped.length>0&&<span style={{fontSize:12,color:'#888',whiteSpace:'nowrap',fontFamily:ff}}>{grouped.length}</span>}
-          </div>
-          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8}}>
-            <label style={{fontSize:12,color:'#666',whiteSpace:'nowrap',fontFamily:ff}}>Tag:</label>
-            <select style={{...inp,width:'auto',minWidth:110,flex:1}} value={filterTag} onChange={e=>setFilterTag(e.target.value)}>
-              <option value='__all__'>All tags</option>
-              {userTags.filter(t=>entries.some(e=>e.tag===t)).map(t=><option key={t} value={t}>{t}</option>)}
-            </select>
           </div>
           <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginBottom:14}}>
             <button onClick={handleExport} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}>Export</button>
@@ -800,18 +811,21 @@ export default function App() {
                       <div
                         onClick={()=>setExpandedCategories(prev=>({...prev,[catKey]:!prev[catKey]}))}
                         style={{
-                          display:'flex',alignItems:'center',gap:10,
-                          padding:'10px 14px',
+                          display:'flex',alignItems:'center',gap:0,
                           background:'#fafafa',
                           border:'1px solid #eee',
                           borderRadius:isExpanded?'8px 8px 0 0':'8px',
                           cursor:'pointer',
-                          borderLeft:'4px solid '+section.color,
+                          overflow:'hidden',
+                          marginBottom:0,
                         }}
                       >
-                        <span style={{flex:1,fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{catName}</span>
-                        <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>{catGroups.length} item{catGroups.length!==1?'s':''}</span>
-                        <span style={{fontSize:11,color:'#aaa'}}>{isExpanded?'▼':'▶'}</span>
+                        <div style={{width:4,background:section.color,alignSelf:'stretch',flexShrink:0}}/>
+                        <div style={{display:'flex',alignItems:'center',flex:1,padding:'10px 14px',gap:10}}>
+                          <span style={{flex:1,fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{catName}</span>
+                          <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>{catGroups.length} item{catGroups.length!==1?'s':''}</span>
+                          <span style={{fontSize:11,color:'#aaa'}}>{isExpanded?'▼':'▶'}</span>
+                        </div>
                       </div>
 
                       {/* Items within category */}
@@ -830,7 +844,9 @@ export default function App() {
                             const moreCount=gEntries.length>3?gEntries.length-3:0;
 
                             return (
-                              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',padding:'12px 14px',borderBottom:'1px solid #f5f5f5'}}>
+                              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',borderBottom:'1px solid #f5f5f5',display:'flex',overflow:'hidden'}}>
+                                <div style={{width:4,background:section.color,flexShrink:0}}/>
+                                <div style={{flex:1,padding:'12px 14px'}}>
                                 {/* Headline */}
                                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
                                   <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{latest.name}</span>
@@ -887,6 +903,7 @@ export default function App() {
                                     <span style={{fontSize:11,color:'#888',fontFamily:ff,textDecoration:'underline'}}>See detail...</span>
                                   </div>
                                 )}
+                                </div>
                               </div>
                             );
                           })}
@@ -957,8 +974,8 @@ export default function App() {
               <div>{lbl('Store')}<AutocompleteInput value={form.store} onChange={v=>setF('store',v)} suggestions={storeNames} placeholder='e.g. Walmart' style={inp}/></div>
             </>,'1fr 1fr')}
             <div style={{marginBottom:12}}>
-              {lbl('Category tag')}
-              <AutocompleteInput value={form.tag} onChange={v=>setF('tag',v)} suggestions={userTags} placeholder='e.g. Dry Goods (optional, private)' style={inp}/>
+              {lbl('Category')}
+              <AutocompleteInput value={form.tag} onChange={v=>setF('tag',v)} suggestions={userTags} placeholder='e.g. Fruits (optional, private)' style={inp}/>
             </div>
 
             <div style={{marginBottom:12}}>
