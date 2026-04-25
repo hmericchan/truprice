@@ -1,4 +1,4 @@
-// TruPrice v2.0i
+// TruPrice v2.0j
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -982,9 +982,12 @@ export default function App() {
             </>,'1fr 1fr')}
 
             {/* Price date + Purchased on same row */}
-            <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,marginBottom:12,alignItems:'end'}}>
-              <div>{lbl('Price date')}<input style={inp} type='date' value={form.priceDate} onChange={e=>setF('priceDate',e.target.value)}/></div>
-              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#666',cursor:'pointer',fontFamily:ff,paddingBottom:8}}>
+            <div style={{display:'flex',gap:20,marginBottom:12,alignItems:'flex-end'}}>
+              <div style={{flex:'0 0 auto'}}>
+                {lbl('Price date')}
+                <input style={{...inp,width:'auto'}} type='date' value={form.priceDate} onChange={e=>setF('priceDate',e.target.value)}/>
+              </div>
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#666',cursor:'pointer',fontFamily:ff,paddingBottom:8,whiteSpace:'nowrap'}}>
                 <input type='checkbox' checked={form.purchased} onChange={e=>setF('purchased',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
                 Purchased?
               </label>
@@ -1095,9 +1098,12 @@ export default function App() {
 
         return (
           <div style={{paddingBottom:80}}>
-            {/* Minimal header */}
-            <div style={{textAlign:'center',marginBottom:14}}>
-              <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice</span>
+            {/* Full header */}
+            <div style={{textAlign:'center',marginBottom:14,position:'relative'}}>
+              <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice - Your Grocery Shopping Companion</span>
+              <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,top:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
+                <UserIcon/>
+              </button>
             </div>
             {/* Unified header: item name + store/brand + intelligence summary — fully tappable → viz */}
             <div
@@ -1201,8 +1207,18 @@ export default function App() {
       })()}
 
       {/* ── VISUALIZATION VIEW ── */}
-      {view==='viz'&&(
+      {view==='viz'&&(()=>{
+        const vizNormLabel=[...new Set(vizEntries.map(e=>e.normLabel).filter(Boolean))][0]||'';
+        return (
         <div style={{paddingBottom:80}}>
+          {/* Full header */}
+          <div style={{textAlign:'center',marginBottom:14,position:'relative'}}>
+            <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice - Your Grocery Shopping Companion</span>
+            <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,top:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
+              <UserIcon/>
+            </button>
+          </div>
+
           <div style={{marginBottom:12}}>
             <div style={{fontWeight:600,fontSize:16,fontFamily:ff,marginBottom:4}}>{vizItemName}</div>
             <div style={{fontSize:12,color:'#888',fontFamily:ff}}>Normalized price over time</div>
@@ -1238,7 +1254,7 @@ export default function App() {
                     {vizChartKeys.map((k,i)=>(<Line key={k} type='monotone' dataKey={k} stroke={COLORS[i%COLORS.length]} strokeWidth={2} dot={{r:4}} activeDot={{r:6}} connectNulls={false}/>))}
                   </LineChart>
                 </ResponsiveContainer>
-                <p style={{fontSize:11,color:'#888',marginTop:8,textAlign:'center',fontFamily:ff}}>Normalized price in {displayCurrency}</p>
+                <p style={{fontSize:11,color:'#888',marginTop:8,textAlign:'center',fontFamily:ff}}>Normalized price in {displayCurrency}{vizNormLabel?' '+vizNormLabel:''}</p>
               </div>
           }
 
@@ -1251,7 +1267,8 @@ export default function App() {
             ]}
           />
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
