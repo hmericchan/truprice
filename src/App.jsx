@@ -1,4 +1,4 @@
-// TruPrice v2.0h
+// TruPrice v2.0i
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -957,39 +957,52 @@ export default function App() {
             </div>
           )}
 
-          <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:12,padding:'1.25rem'}}>
-            <p style={{fontSize:13,color:editId?'#1a73e8':'#444441',marginBottom:12,marginTop:0,fontFamily:ff}}>
+          <div>
+            <p style={{fontSize:13,color:editId?'#1a73e8':'#444441',marginBottom:4,marginTop:0,fontFamily:ff}}>
               {editId?'Editing existing record':'New Entry'}
             </p>
+            <p style={{fontSize:11,color:'#aaa',marginBottom:12,marginTop:0,fontFamily:ff}}>Fields marked * are required</p>
 
+            {/* Item name */}
             <div style={{marginBottom:12}}>
               {lbl('Item name',true)}
               <AutocompleteInput value={form.name} onChange={v=>setF('name',v)} suggestions={itemNames} placeholder='Type or select a previous item' style={inp}/>
             </div>
+
+            {/* Category */}
+            <div style={{marginBottom:12}}>
+              {lbl('Category')}
+              <AutocompleteInput value={form.tag} onChange={v=>setF('tag',v)} suggestions={userTags} placeholder='e.g. Fruits' style={inp}/>
+            </div>
+
+            {/* Brand + Store */}
             {field(<>
               <div>{lbl('Brand')}<AutocompleteInput value={form.brand} onChange={v=>setF('brand',v)} suggestions={brandNames} placeholder='e.g. Quaker' style={inp}/></div>
               <div>{lbl('Store')}<AutocompleteInput value={form.store} onChange={v=>setF('store',v)} suggestions={storeNames} placeholder='e.g. Walmart' style={inp}/></div>
             </>,'1fr 1fr')}
-            <div style={{marginBottom:12}}>
-              {lbl('Category')}
-              <AutocompleteInput value={form.tag} onChange={v=>setF('tag',v)} suggestions={userTags} placeholder='e.g. Fruits (optional, private)' style={inp}/>
+
+            {/* Price date + Purchased on same row */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,marginBottom:12,alignItems:'end'}}>
+              <div>{lbl('Price date')}<input style={inp} type='date' value={form.priceDate} onChange={e=>setF('priceDate',e.target.value)}/></div>
+              <label style={{display:'flex',alignItems:'center',gap:6,fontSize:13,color:'#666',cursor:'pointer',fontFamily:ff,paddingBottom:8}}>
+                <input type='checkbox' checked={form.purchased} onChange={e=>setF('purchased',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
+                Purchased?
+              </label>
             </div>
 
+            {/* Pricing type — all 4 on one row */}
             <div style={{marginBottom:12}}>
               {lbl('Pricing type',true)}
-              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                {[{key:'single',label:'Single'},{key:'bundle',label:'Bundle'},{key:'buyxgety',label:'Buy X Get Y Free'}].map(t=>(
-                  <button key={t.key} onClick={()=>setF('pricingType',t.key)} style={{padding:'7px 16px',fontSize:13,cursor:'pointer',borderRadius:8,border:form.pricingType===t.key?'1px solid #444441':'1px solid #aaa',background:form.pricingType===t.key?'#444441':'transparent',color:form.pricingType===t.key?'#fff':'#666',fontFamily:ff}}>{t.label}</button>
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                {[{key:'single',label:'Single'},{key:'bundle',label:'Bundle'},{key:'buyxgety',label:'Buy X Get Y'}].map(t=>(
+                  <button key={t.key} onClick={()=>setF('pricingType',t.key)} style={{padding:'7px 12px',fontSize:12,cursor:'pointer',borderRadius:8,border:form.pricingType===t.key?'1px solid #444441':'1px solid #aaa',background:form.pricingType===t.key?'#444441':'transparent',color:form.pricingType===t.key?'#fff':'#666',fontFamily:ff}}>{t.label}</button>
                 ))}
-                <button onClick={()=>setMixedBundleMsg(m=>!m)} style={{padding:'7px 16px',fontSize:13,cursor:'not-allowed',borderRadius:8,border:'1px solid #ddd',background:'#f5f5f5',color:'#bbb',fontFamily:ff}}>Mixed Bundle</button>
-                <label style={{display:'flex',alignItems:'center',gap:6,marginLeft:8,fontSize:13,color:'#666',cursor:'pointer',fontFamily:ff}}>
-                  <input type='checkbox' checked={form.purchased} onChange={e=>setF('purchased',e.target.checked)} style={{width:16,height:16,cursor:'pointer'}}/>
-                  Purchased?
-                </label>
+                <button onClick={()=>setMixedBundleMsg(m=>!m)} style={{padding:'7px 12px',fontSize:12,cursor:'not-allowed',borderRadius:8,border:'1px solid #ddd',background:'#f5f5f5',color:'#bbb',fontFamily:ff}}>Mixed Bundle</button>
               </div>
               {mixedBundleMsg&&<p style={{fontSize:12,color:'#aaa',margin:'6px 0 0',fontFamily:ff}}>This feature is under development.</p>}
             </div>
 
+            {/* Currency */}
             <div style={{marginBottom:12}}>
               {lbl('Currency')}
               <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
@@ -997,12 +1010,15 @@ export default function App() {
               </div>
             </div>
 
+            {/* Single pricing */}
             {form.pricingType==='single'&&(
               field(<>
                 <div>{lbl('Price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 4.99'/></div>
-                <div>{lbl('Original / listed price')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origPrice} onChange={v=>setF('origPrice',v)} placeholder='e.g. 6.99 (optional)'/></div>
+                <div>{lbl('Original / listed price')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origPrice} onChange={v=>setF('origPrice',v)} placeholder='e.g. 6.99'/></div>
               </>,'1fr 1fr')
             )}
+
+            {/* Bundle pricing */}
             {form.pricingType==='bundle'&&(
               <div style={{background:'#f9f9f9',border:'1px solid #ddd',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
                 {field(<>
@@ -1010,18 +1026,20 @@ export default function App() {
                   <div>{lbl('Packs in bundle',true)}<ClearableInput style={inp} type='number' min='2' step='1' value={form.bundleQty} onChange={v=>setF('bundleQty',v)} placeholder='e.g. 2'/></div>
                 </>,'1fr 1fr')}
                 {form.price&&form.bundleQty&&<p style={{fontSize:12,color:'#666',margin:'4px 0 8px',fontFamily:ff}}>Price per pack: {CURRENCY_SYMBOLS[form.currency]||form.currency}{(parseFloat(form.price)/parseFloat(form.bundleQty)).toFixed(2)}</p>}
-                <div>{lbl('Original unit price (optional)')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 6.99 per pack'/></div>
+                <div>{lbl('Original unit price')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 6.99 per pack'/></div>
               </div>
             )}
+
+            {/* Buy X Get Y pricing */}
             {form.pricingType==='buyxgety'&&(
               <div style={{background:'#f9f9f9',border:'1px solid #ddd',borderRadius:8,padding:'10px 12px',marginBottom:12}}>
                 {field(<>
                   <div>{lbl('Regular unit price',true)}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.price} onChange={v=>setF('price',v)} placeholder='e.g. 15.00'/></div>
-                  <div>{lbl('Original unit price (optional)')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 18.00'/></div>
+                  <div>{lbl('Original unit price')}<ClearableInput style={inp} type='number' min='0' step='0.01' value={form.origUnitPrice} onChange={v=>setF('origUnitPrice',v)} placeholder='e.g. 18.00'/></div>
                 </>,'1fr 1fr')}
                 {field(<>
                   <div>{lbl('Buy (X)',true)}<ClearableInput style={inp} type='number' min='1' step='1' value={form.buyX} onChange={v=>setF('buyX',v)} placeholder='e.g. 3'/></div>
-                  <div>{lbl('Get free (Y)',true)}<ClearableInput style={inp} type='number' min='1' step='1' value={form.getY} onChange={v=>setF('getY',v)} placeholder='e.g. 1'/></div>
+                  <div>{lbl('Get (Y) free',true)}<ClearableInput style={inp} type='number' min='1' step='1' value={form.getY} onChange={v=>setF('getY',v)} placeholder='e.g. 1'/></div>
                 </>,'1fr 1fr')}
                 {form.price&&form.buyX&&form.getY&&(
                   <p style={{fontSize:12,color:'#666',margin:'4px 0 0',fontFamily:ff}}>
@@ -1031,10 +1049,11 @@ export default function App() {
               </div>
             )}
 
+            {/* Package size + Unit */}
             {field(<>
               <div>{lbl('Package size',true)}<ClearableInput style={inp} type='number' min='0' step='any' value={form.qty} onChange={v=>setF('qty',v)} placeholder='e.g. 500'/></div>
               <div>{lbl('Unit',true)}
-                <select style={{...inp,height:'36px'}} value={form.unit} onChange={e=>setF('unit',e.target.value)}>
+                <select style={inp} value={form.unit} onChange={e=>setF('unit',e.target.value)}>
                   {UNIT_GROUPS.map(g=>(<optgroup key={g.label} label={g.label}>{g.units.map(u=><option key={u} value={u}>{u}</option>)}</optgroup>))}
                 </select>
               </div>
@@ -1056,8 +1075,10 @@ export default function App() {
                 {discountInfo.isHigher?'Current price is HIGHER than the original listed price!':'Actual discount: '+discountInfo.advertised+'% lower than listed'}
               </div>
             )}
+
+            {/* Note */}
             <div style={{marginBottom:12}}>{lbl('Note')}<ClearableInput style={inp} value={form.note} onChange={v=>setF('note',v)} placeholder='Optional note'/></div>
-            {field(<><div>{lbl('Price date')}<input style={inp} type='date' value={form.priceDate} onChange={e=>setF('priceDate',e.target.value)}/></div></>)}
+
             <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
               <button onClick={handleCancel} style={{padding:'9px 20px',background:'transparent',color:'#666',border:'1px solid #aaa',borderRadius:8,fontSize:14,cursor:'pointer',fontFamily:ff}}>Cancel</button>
               <button onClick={handleSave} style={{padding:'9px 20px',background:'#444441',color:'#fff',border:'1px solid #444441',borderRadius:8,fontSize:14,cursor:'pointer',fontWeight:500,fontFamily:ff}}>{editId?'Update':'Save'}</button>
