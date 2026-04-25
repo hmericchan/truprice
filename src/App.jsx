@@ -1,4 +1,4 @@
-// TruPrice v2.0g
+// TruPrice v2.0h
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -819,7 +819,7 @@ export default function App() {
                           padding:'10px 14px 10px 10px',
                         }}
                       >
-                        <div style={{width:4,alignSelf:'stretch',background:section.color,flexShrink:0,margin:'6px 0 6px 6px',borderRadius:2}}/>
+                        <div style={{width:10,height:10,borderRadius:5,background:section.color,flexShrink:0}}/>
                         <span style={{flex:1,fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{catName}</span>
                         <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>{catGroups.length} item{catGroups.length!==1?'s':''}</span>
                         <span style={{fontSize:11,color:'#aaa'}}>{isExpanded?'▼':'▶'}</span>
