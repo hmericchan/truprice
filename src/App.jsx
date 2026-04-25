@@ -1,4 +1,4 @@
-// TruPrice v2.0e
+// TruPrice v2.0g
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -811,20 +811,18 @@ export default function App() {
                       <div
                         onClick={()=>setExpandedCategories(prev=>({...prev,[catKey]:!prev[catKey]}))}
                         style={{
-                          display:'flex',alignItems:'center',gap:0,
+                          display:'flex',alignItems:'center',gap:10,
                           background:'#fafafa',
                           border:'1px solid #eee',
                           borderRadius:isExpanded?'8px 8px 0 0':'8px',
                           cursor:'pointer',
-                          overflow:'hidden',
+                          padding:'10px 14px 10px 10px',
                         }}
                       >
-                        <div style={{width:4,background:section.color,alignSelf:'stretch',flexShrink:0}}/>
-                        <div style={{display:'flex',alignItems:'center',flex:1,padding:'10px 14px',gap:10}}>
-                          <span style={{flex:1,fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{catName}</span>
-                          <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>{catGroups.length} item{catGroups.length!==1?'s':''}</span>
-                          <span style={{fontSize:11,color:'#aaa'}}>{isExpanded?'▼':'▶'}</span>
-                        </div>
+                        <div style={{width:4,alignSelf:'stretch',background:section.color,flexShrink:0,margin:'6px 0 6px 6px',borderRadius:2}}/>
+                        <span style={{flex:1,fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{catName}</span>
+                        <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>{catGroups.length} item{catGroups.length!==1?'s':''}</span>
+                        <span style={{fontSize:11,color:'#aaa'}}>{isExpanded?'▼':'▶'}</span>
                       </div>
 
                       {/* Items within category */}
@@ -843,8 +841,8 @@ export default function App() {
                             const moreCount=gEntries.length>3?gEntries.length-3:0;
 
                             return (
-                              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',border:'1px solid '+(comp?.isLowest?'#a8d5b5':'#ddd'),borderRadius:12,marginBottom:8,display:'flex',overflow:'hidden'}}>
-                                <div style={{width:4,background:section.color,flexShrink:0}}/>
+                              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',border:'1px solid '+(comp?.isLowest?'#a8d5b5':'#ddd'),borderRadius:12,marginBottom:8,display:'flex',alignItems:'stretch'}}>
+                                <div style={{width:4,background:section.color,flexShrink:0,margin:'8px 0 8px 8px',borderRadius:2}}/>
                                 <div style={{flex:1,padding:'12px 14px'}}>
                                 {/* Headline */}
                                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
