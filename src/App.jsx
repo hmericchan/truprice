@@ -1,4 +1,4 @@
-// TruPrice v2.0d
+// TruPrice v2.0e
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -817,7 +817,6 @@ export default function App() {
                           borderRadius:isExpanded?'8px 8px 0 0':'8px',
                           cursor:'pointer',
                           overflow:'hidden',
-                          marginBottom:0,
                         }}
                       >
                         <div style={{width:4,background:section.color,alignSelf:'stretch',flexShrink:0}}/>
@@ -830,7 +829,7 @@ export default function App() {
 
                       {/* Items within category */}
                       {isExpanded&&(
-                        <div style={{borderLeft:'4px solid '+section.color,borderRight:'1px solid #eee',borderBottom:'1px solid #eee',borderRadius:'0 0 8px 8px',overflow:'hidden'}}>
+                        <div style={{marginTop:6}}>
                           {catGroups.map(([gk,gEntries])=>{
                             const latest=gEntries[0];
                             const headline=getHeadlineEntry(gEntries);
@@ -844,7 +843,7 @@ export default function App() {
                             const moreCount=gEntries.length>3?gEntries.length-3:0;
 
                             return (
-                              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',borderBottom:'1px solid #f5f5f5',display:'flex',overflow:'hidden'}}>
+                              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',border:'1px solid '+(comp?.isLowest?'#a8d5b5':'#ddd'),borderRadius:12,marginBottom:8,display:'flex',overflow:'hidden'}}>
                                 <div style={{width:4,background:section.color,flexShrink:0}}/>
                                 <div style={{flex:1,padding:'12px 14px'}}>
                                 {/* Headline */}
