@@ -1,4 +1,4 @@
-// TruPrice v2.0a
+// TruPrice v2.0b
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -181,7 +181,7 @@ function RadialMenu({ buttons, onOpenSettings }) {
             onClick={() => { setOpen(false); btn.onClick(); }}
             style={{
               position: 'fixed',
-              bottom: 28 - pos.y,
+              bottom: 28 + pos.y,
               right: 24 - pos.x,
               zIndex: 301,
               width: 44, height: 44, borderRadius: 22,
@@ -500,6 +500,9 @@ export default function App() {
   // Obs 7: intelligence banner content for detail page
   function bannerContent(gEntries) {
     const itemName=gEntries[0]?.name;
+    const currentGk=groupKey(gEntries[0]);
+    const currentStore=gEntries[0]?.store||'';
+    const currentBrand=gEntries[0]?.brand||'';
     const myUnitType=UNIT_TYPE[gEntries[0]?.unit];
 
     // all groups for same item, matching unit type
@@ -509,68 +512,56 @@ export default function App() {
       if(!sameItemGroups[k]) sameItemGroups[k]=[];
       sameItemGroups[k].push(e);
     });
-    const groupKeys=Object.keys(sameItemGroups);
-    const multiStore=groupKeys.length>1;
+    const allGroupKeys=Object.keys(sameItemGroups);
+    const multiStore=allGroupKeys.length>1;
 
     // latest per group
     const latestPerGroup={};
-    groupKeys.forEach(k=>{
+    allGroupKeys.forEach(k=>{
       const sorted=[...sameItemGroups[k]].sort((a,b)=>b.date.localeCompare(a.date));
       latestPerGroup[k]=sorted[0];
     });
 
-    const currentGk=groupKey(gEntries[0]);
     const currentLatest=latestPerGroup[currentGk]||gEntries[0];
     const currentDn=dispNormOf(currentLatest);
+    const normLabel=currentLatest?.normLabel||'';
 
     // historical low within this group
     const withNorm=gEntries.filter(e=>e.normalized);
     const allDns=withNorm.map(e=>({ e,dn:dispNormOf(e) })).filter(x=>x.dn!=null);
     const minDn=allDns.length?Math.min(...allDns.map(x=>x.dn)):null;
-    const lowEntry=allDns.find(x=>x.dn===minDn);
+    const lowEntry=allDns.find(x=>Math.abs(x.dn-minDn)<0.05);
     const isCurrentLow=currentDn!=null&&minDn!=null&&Math.abs(currentDn-minDn)<0.05;
 
+    // Scenario 1: single record, single store
+    if(!multiStore&&withNorm.length<=1) {
+      const e=gEntries[0];
+      return 'Last seen'+(currentStore?' at '+currentStore:'')+' — '+currSymbol+(currentDn||'—')+(normLabel?' '+normLabel:'')+', '+timeAgo(e?.date);
+    }
+
+    // Scenario 2: multiple records, single store
     if(!multiStore) {
-      // Scenario 1: one entry, one store
-      if(withNorm.length<=1) {
-        const store=gEntries[0]?.store||'';
-        return { line1:'Last seen'+(store?' at '+store:''), line2:timeAgo(gEntries[0]?.date)+' · '+currSymbol+(currentDn||'—')+(currentLatest?.normLabel?' '+currentLatest.normLabel:''), line3:null, competitorGk:null };
+      if(isCurrentLow) {
+        return 'Record low at '+(currentStore||'this store')+' — '+currSymbol+minDn+(normLabel?' '+normLabel:'')+', last seen '+timeAgo(lowEntry?.e.date);
       }
-      // Scenario 2: multiple entries, one store
-      const store=currentLatest?.store||'';
-      const nowDn=currentDn;
-      const pct=minDn&&nowDn?Math.round(Math.abs(nowDn-minDn)/minDn*100):null;
-      const arrow=nowDn&&minDn?(nowDn>minDn?'▲':'▼'):null;
-      return {
-        line1:(store||'This store')+' · Record Low: '+currSymbol+minDn+(lowEntry?.e.normLabel?' '+lowEntry.e.normLabel:''),
-        line2:'Now: '+currSymbol+(nowDn||'—')+(currentLatest?.normLabel?' '+currentLatest.normLabel:'')+(arrow&&pct?' '+arrow+pct+'%':'')+(isCurrentLow?' · Record Low ✓':''),
-        line3:lowEntry&&!isCurrentLow?'Lowest on '+lowEntry.e.date:null,
-        competitorGk:null
-      };
+      return 'Price at '+(currentStore||'this store')+' is up from the record low of '+currSymbol+minDn+(normLabel?' '+normLabel:'')+', last seen '+timeAgo(lowEntry?.e.date);
     }
 
     // multi-store: find cheapest latest
     const allLatest=Object.values(latestPerGroup).filter(e=>e.normalized);
     const allLatestDns=allLatest.map(e=>({ e,dn:dispNormOf(e) })).filter(x=>x.dn!=null);
-    if(!allLatestDns.length) return { line1:'No normalized data available.',line2:null,line3:null,competitorGk:null };
+    if(!allLatestDns.length) return 'No price data available.';
     const cheapestDn=Math.min(...allLatestDns.map(x=>x.dn));
     const cheapestEntry=allLatestDns.find(x=>Math.abs(x.dn-cheapestDn)<0.05)?.e;
     const cheapestGk=cheapestEntry?groupKey(cheapestEntry):null;
     const isThisCheapest=cheapestGk===currentGk;
+    const cheapestLabel=(cheapestEntry?.brand?cheapestEntry.brand+' @ ':'')+( cheapestEntry?.store||'');
 
-    // Scenario 3/4
-    const cheapestStore=cheapestEntry?.store||'';
-    const cheapestBrand=cheapestEntry?.brand||'';
-    const cheapestLabel=(cheapestBrand?cheapestBrand+' @ ':'')+cheapestStore;
-    const nowDn2=currentDn;
-    const pct2=cheapestDn&&nowDn2&&!isThisCheapest?Math.round(Math.abs(nowDn2-cheapestDn)/cheapestDn*100):null;
-
-    return {
-      line1:isThisCheapest?'Best deal among stores':'Best deal: '+cheapestLabel,
-      line2:currSymbol+cheapestDn+(cheapestEntry?.normLabel?' '+cheapestEntry.normLabel:'')+(cheapestEntry?.date?' · '+cheapestEntry.date:''),
-      line3:!isThisCheapest&&nowDn2?'Here: '+currSymbol+nowDn2+(pct2?' ▲'+pct2+'% more':''):null,
-      competitorGk:isThisCheapest?null:cheapestGk
-    };
+    // Scenario 3/4: multiple stores
+    if(isThisCheapest) {
+      return 'Record low at '+(currentStore||'this store')+' — '+currSymbol+minDn+(normLabel?' '+normLabel:'')+', last seen '+timeAgo(lowEntry?.e.date);
+    }
+    return 'Better deal at '+cheapestLabel+' — '+currSymbol+cheapestDn+(cheapestEntry?.normLabel?' '+cheapestEntry.normLabel:'')+', seen '+timeAgo(cheapestEntry?.date)+' vs '+currSymbol+(currentDn||'—')+' at '+(currentStore||'here');
   }
 
   const grouped = useMemo(()=>{
@@ -829,6 +820,16 @@ export default function App() {
                     {moreCount>0&&<div style={{fontSize:11,color:'#888',marginTop:4,textAlign:'right',fontFamily:ff,textDecoration:'underline',cursor:'pointer'}}>and {moreCount} more...</div>}
                   </div>
                 )}
+
+                {/* Single record — See detail link */}
+                {gEntries.length===1&&(
+                  <div
+                    onClick={()=>navigateToDetail(gk)}
+                    style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer',textAlign:'right'}}
+                  >
+                    <span style={{fontSize:11,color:'#888',fontFamily:ff,textDecoration:'underline'}}>See detail...</span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -998,8 +999,8 @@ export default function App() {
             <div
               onClick={()=>navigateToViz(headline.name)}
               style={{
-                background:'#f0faf4',
-                border:'1px solid #a8d5b5',
+                background:'#f9f9f9',
+                border:'1px solid #eee',
                 borderRadius:12,
                 padding:'12px 16px',
                 marginBottom:12,
@@ -1012,9 +1013,7 @@ export default function App() {
                 {headline.brand&&<span>Brand: {headline.brand}</span>}
                 {headline.tag&&<span>Tag: {headline.tag}</span>}
               </div>
-              <div style={{fontSize:12,fontWeight:500,color:'#1e7e34',fontFamily:ff}}>{banner.line1}</div>
-              {banner.line2&&<div style={{fontSize:12,color:'#555',fontFamily:ff,marginTop:2}}>{banner.line2}</div>}
-              {banner.line3&&<div style={{fontSize:11,color:'#888',fontFamily:ff,marginTop:2}}>{banner.line3}</div>}
+              <div style={{fontSize:12,color:'#444',fontFamily:ff}}>{banner}</div>
               <div style={{fontSize:10,color:'#aaa',fontFamily:ff,marginTop:4}}>Tap to view price chart →</div>
             </div>
 
