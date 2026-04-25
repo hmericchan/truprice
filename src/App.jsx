@@ -1,4 +1,4 @@
-// TruPrice v2.0b
+// TruPrice v2.0c
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -21,8 +21,23 @@ const PRESET_TAGS = [
   'Meat & Poultry','Seafood','Vegetables','Fruits','Tofu & Eggs',
   'Dry Goods','Canned & Bottled','Rice & Grains','Noodles & Pasta','Snacks',
   'Chinese Herbs','Health Foods','Supplements',
-  'Condiments & Sauces','Beverages','Dairy','Frozen','Cleaning & Personal Care'
+  'Condiments & Sauces','Beverages','Dairy','Frozen','Cleaning & Personal Care',
+  'Alcohols','Baking','Chinese Pastries','Frozen Dessert','Soup Ingredients','家品',
 ];
+
+const SECTION_MAP = [
+  { name:'Food', color:'#4CAF50', categories:['Meat & Poultry','Seafood','Vegetables','Fruits','Tofu & Eggs','Dairy','Frozen','Frozen Dessert','Snacks','Chinese Pastries','Beverages','Rice & Grains','Noodles & Pasta','Dry Goods','Canned & Bottled','Condiments & Sauces','Baking','Soup Ingredients','Chinese Herbs'] },
+  { name:'Alcohol', color:'#FF8F00', categories:['Alcohols'] },
+  { name:'Medicine & Supplements', color:'#1a73e8', categories:['Health Foods','Supplements'] },
+  { name:'Household', color:'#7F77DD', categories:['Cleaning & Personal Care','家品'] },
+];
+const SECTION_OTHER = { name:'Other', color:'#888' };
+
+function getSectionForTag(tag) {
+  if(!tag) return SECTION_OTHER;
+  const found=SECTION_MAP.find(s=>s.categories.includes(tag));
+  return found||SECTION_OTHER;
+}
 const today = () => new Date().toISOString().slice(0,10);
 const EMPTY = { name:'',brand:'',store:'',tag:'',pricingType:'single',price:'',qty:'',unit:'g',bundleQty:'2',origPrice:'',origUnitPrice:'',buyX:'2',getY:'1',note:'',priceDate:today(),currency:'HKD',purchased:false };
 const ff = 'system-ui,-apple-system,sans-serif';
@@ -305,6 +320,7 @@ export default function App() {
   const [showPersonalization,setShowPersonalization] = useState(false);
   const [prefs,setPrefs] = useState(loadPrefs);
   const [mixedBundleMsg,setMixedBundleMsg] = useState(false);
+  const [expandedCategories,setExpandedCategories] = useState({});
 
   const displayCurrency=prefs.displayCurrency;
   const selectedCurrencies=prefs.selectedCurrencies;
@@ -582,6 +598,28 @@ export default function App() {
     return Object.entries(map).sort((a,b)=>b[1][0].date.localeCompare(a[1][0].date));
   },[entries,filterValue,viewBy,filterTag]);
 
+  // Section → Category → grouped items structure
+  const groupedBySectionCategory = useMemo(()=>{
+    // build section → category → groups map
+    const sectionCatMap={};
+    grouped.forEach(([gk,gEntries])=>{
+      const tag=gEntries[0]?.tag||'';
+      const section=getSectionForTag(tag);
+      const sectionName=section.name;
+      const catName=tag||'Untagged';
+      if(!sectionCatMap[sectionName]) sectionCatMap[sectionName]={ section, categories:{} };
+      if(!sectionCatMap[sectionName].categories[catName]) sectionCatMap[sectionName].categories[catName]=[];
+      sectionCatMap[sectionName].categories[catName].push([gk,gEntries]);
+    });
+
+    // order sections by SECTION_MAP order, Other last
+    const ordered=[];
+    [...SECTION_MAP,SECTION_OTHER].forEach(s=>{
+      if(sectionCatMap[s.name]) ordered.push({ section:s, categories:sectionCatMap[s.name].categories });
+    });
+    return ordered;
+  },[grouped]);
+
   // detail page entries
   const detailEntries = useMemo(()=>{
     if(!detailKey) return [];
@@ -741,95 +779,122 @@ export default function App() {
 
           {grouped.length===0&&<p style={{color:'#888',fontSize:14,fontFamily:ff}}>No entries yet. Tap + to add your first item.</p>}
 
-          {grouped.map(([gk,gEntries])=>{
-            const latest=gEntries[0];
-            const headline=getHeadlineEntry(gEntries);
-            const headlineDispNorm=dispNormOf(headline);
-            const headlineCurr=headline.currency||'HKD';
-            const headlineSymbol=CURRENCY_SYMBOLS[headlineCurr]||headlineCurr;
-            const headlineDispPrice=parseFloat(convertPrice(headline.price,headlineCurr).toFixed(2));
-            const histLow=getHistoricalLow(gEntries,headlineDispNorm);
-            const comp=competitionInfo(latest.name,headlineDispNorm,headline.unit);
-            const summaryRows=gEntries.slice(1,3);
-            const moreCount=gEntries.length>3?gEntries.length-3:0;
-
+          {groupedBySectionCategory.map(({section,categories})=>{
+            const sectionItemCount=Object.values(categories).reduce((sum,grps)=>sum+grps.length,0);
             return (
-              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',border:'1px solid '+(comp?.isLowest?'#a8d5b5':'#ddd'),borderRadius:12,padding:'12px 16px',marginBottom:10}}>
-                {/* Headline */}
-                <div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
-                    <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{latest.name}</span>
-                    <span style={{fontSize:12,color:'#888',fontFamily:ff,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:4}}>
-                      {latest.date}{headline.purchased&&<BagIcon size={11} color='#aaa'/>}
-                    </span>
-                  </div>
-                  {(latest.store||latest.brand)&&(
-                    <div style={{fontSize:11,color:'#999',fontFamily:ff,marginTop:2,display:'flex',gap:12}}>
-                      {latest.store&&<span>Store: {latest.store}</span>}
-                      {latest.brand&&<span>Brand: {latest.brand}</span>}
-                    </div>
-                  )}
-                  {latest.tag&&<span style={{fontSize:11,padding:'2px 8px',borderRadius:6,background:'#f0f0f0',color:'#666',fontFamily:ff,display:'inline-block',marginTop:4}}>{latest.tag}</span>}
-                  {latest.pricingType==='bundle'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4,marginLeft:4}}>bundle x{latest.bundleQty}</span>}
-                  {latest.pricingType==='buyxgety'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4,marginLeft:4}}>buy {latest.buyX} get {latest.getY} free</span>}
-
-                  <div style={{display:'flex',gap:16,marginTop:6,flexWrap:'wrap',fontSize:13,fontFamily:ff,alignItems:'center'}}>
-                    <span><span style={{color:'#888'}}>Price: </span>{headlineCurr===displayCurrency?headlineSymbol+headline.price.toFixed(2):headlineSymbol+headline.price.toFixed(2)+' ('+currSymbol+headlineDispPrice+')'}</span>
-                    <span><span style={{color:'#888'}}>Size: </span>{headline.qty}{headline.unit}</span>
-                    {headlineDispNorm!=null&&(
-                      <span style={{color:'#1a73e8',fontWeight:500}}>{currSymbol}{headlineDispNorm} {headline.normLabel}</span>
-                    )}
-                  </div>
-                  {histLow&&<div style={{fontSize:11,color:'#888',marginTop:4,fontFamily:ff}}>Record Low: {currSymbol}{histLow.dn} · {histLow.date}</div>}
-                  {comp&&!comp.isLowest&&<div style={{fontSize:11,color:'#888',marginTop:2,fontFamily:ff}}>Cheaper: {comp.cheapestLabel} at {currSymbol}{comp.minNorm.toFixed(1)} {headline.normLabel}</div>}
-                  {comp?.isLowest&&<div style={{fontSize:11,color:'#1e7e34',marginTop:2,fontFamily:ff}}>Best price among stores</div>}
+              <div key={section.name}>
+                {/* Section separator */}
+                <div style={{display:'flex',alignItems:'center',gap:8,margin:'16px 0 10px',fontFamily:ff}}>
+                  <div style={{flex:1,height:'1px',background:'#e0e0e0'}}/>
+                  <span style={{fontSize:11,color:'#aaa',whiteSpace:'nowrap'}}>{section.name} ({sectionItemCount})</span>
+                  <div style={{flex:1,height:'1px',background:'#e0e0e0'}}/>
                 </div>
 
-                {/* Summary table — tappable → detail */}
-                {summaryRows.length>0&&(
-                  <div
-                    onClick={()=>navigateToDetail(gk)}
-                    style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer'}}
-                  >
-                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff,tableLayout:'fixed'}}>
-                      <colgroup>
-                        <col style={{width:'28%'}}/>
-                        <col style={{width:'42%'}}/>
-                        <col style={{width:'30%'}}/>
-                      </colgroup>
-                      <tbody>
-                        {summaryRows.map(e=>{
-                          const eDn=dispNormOf(e);
-                          const isLow=isHistoricalLowEntry(e,gEntries);
-                          return (
-                            <tr key={e.id} style={{background:isLow?'#edfbf3':'transparent'}}>
-                              <td style={{padding:'4px 6px 4px 0',color:'#666',whiteSpace:'nowrap',overflow:'hidden'}}>
-                                {e.date}{e.purchased&&<span style={{marginLeft:4,display:'inline-flex',verticalAlign:'middle'}}><BagIcon size={11} color='#aaa'/></span>}
-                              </td>
-                              <td style={{padding:'4px 6px',color:'#aaa',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                                {e.note||''}
-                              </td>
-                              <td style={{padding:'4px 0 4px 6px',textAlign:'right',color:'#1a73e8',fontWeight:500,whiteSpace:'nowrap',overflow:'hidden'}}>
-                                {eDn!=null?currSymbol+eDn+' '+(e.normLabel||''):'—'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {moreCount>0&&<div style={{fontSize:11,color:'#888',marginTop:4,textAlign:'right',fontFamily:ff,textDecoration:'underline',cursor:'pointer'}}>and {moreCount} more...</div>}
-                  </div>
-                )}
+                {/* Categories */}
+                {Object.entries(categories).map(([catName,catGroups])=>{
+                  const catKey=section.name+'|||'+catName;
+                  const isExpanded=!!expandedCategories[catKey];
+                  return (
+                    <div key={catKey} style={{marginBottom:6}}>
+                      {/* Category row */}
+                      <div
+                        onClick={()=>setExpandedCategories(prev=>({...prev,[catKey]:!prev[catKey]}))}
+                        style={{
+                          display:'flex',alignItems:'center',gap:10,
+                          padding:'10px 14px',
+                          background:'#fafafa',
+                          border:'1px solid #eee',
+                          borderRadius:isExpanded?'8px 8px 0 0':'8px',
+                          cursor:'pointer',
+                          borderLeft:'4px solid '+section.color,
+                        }}
+                      >
+                        <span style={{flex:1,fontSize:13,color:'#444',fontFamily:ff,fontWeight:500}}>{catName}</span>
+                        <span style={{fontSize:11,color:'#aaa',fontFamily:ff}}>{catGroups.length} item{catGroups.length!==1?'s':''}</span>
+                        <span style={{fontSize:11,color:'#aaa'}}>{isExpanded?'▼':'▶'}</span>
+                      </div>
 
-                {/* Single record — See detail link */}
-                {gEntries.length===1&&(
-                  <div
-                    onClick={()=>navigateToDetail(gk)}
-                    style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer',textAlign:'right'}}
-                  >
-                    <span style={{fontSize:11,color:'#888',fontFamily:ff,textDecoration:'underline'}}>See detail...</span>
-                  </div>
-                )}
+                      {/* Items within category */}
+                      {isExpanded&&(
+                        <div style={{borderLeft:'4px solid '+section.color,borderRight:'1px solid #eee',borderBottom:'1px solid #eee',borderRadius:'0 0 8px 8px',overflow:'hidden'}}>
+                          {catGroups.map(([gk,gEntries])=>{
+                            const latest=gEntries[0];
+                            const headline=getHeadlineEntry(gEntries);
+                            const headlineDispNorm=dispNormOf(headline);
+                            const headlineCurr=headline.currency||'HKD';
+                            const headlineSymbol=CURRENCY_SYMBOLS[headlineCurr]||headlineCurr;
+                            const headlineDispPrice=parseFloat(convertPrice(headline.price,headlineCurr).toFixed(2));
+                            const histLow=getHistoricalLow(gEntries,headlineDispNorm);
+                            const comp=competitionInfo(latest.name,headlineDispNorm,headline.unit);
+                            const summaryRows=gEntries.slice(1,3);
+                            const moreCount=gEntries.length>3?gEntries.length-3:0;
+
+                            return (
+                              <div key={gk} style={{background:comp?.isLowest?'#f0faf4':'#fff',padding:'12px 14px',borderBottom:'1px solid #f5f5f5'}}>
+                                {/* Headline */}
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
+                                  <span style={{fontWeight:500,fontSize:15,fontFamily:ff}}>{latest.name}</span>
+                                  <span style={{fontSize:12,color:'#888',fontFamily:ff,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:4}}>
+                                    {latest.date}{headline.purchased&&<BagIcon size={11} color='#aaa'/>}
+                                  </span>
+                                </div>
+                                {(latest.store||latest.brand)&&(
+                                  <div style={{fontSize:11,color:'#999',fontFamily:ff,marginTop:2,display:'flex',gap:12}}>
+                                    {latest.store&&<span>Store: {latest.store}</span>}
+                                    {latest.brand&&<span>Brand: {latest.brand}</span>}
+                                  </div>
+                                )}
+                                {latest.pricingType==='bundle'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4}}>bundle x{latest.bundleQty}</span>}
+                                {latest.pricingType==='buyxgety'&&<span style={{fontSize:11,padding:'2px 7px',borderRadius:6,background:'#fff8e1',color:'#b26a00',fontFamily:ff,display:'inline-block',marginTop:4}}>buy {latest.buyX} get {latest.getY} free</span>}
+
+                                <div style={{display:'flex',gap:16,marginTop:6,flexWrap:'wrap',fontSize:13,fontFamily:ff,alignItems:'center'}}>
+                                  <span><span style={{color:'#888'}}>Price: </span>{headlineCurr===displayCurrency?headlineSymbol+headline.price.toFixed(2):headlineSymbol+headline.price.toFixed(2)+' ('+currSymbol+headlineDispPrice+')'}</span>
+                                  <span><span style={{color:'#888'}}>Size: </span>{headline.qty}{headline.unit}</span>
+                                  {headlineDispNorm!=null&&<span style={{color:'#1a73e8',fontWeight:500}}>{currSymbol}{headlineDispNorm} {headline.normLabel}</span>}
+                                </div>
+                                {histLow&&<div style={{fontSize:11,color:'#888',marginTop:4,fontFamily:ff}}>Record Low: {currSymbol}{histLow.dn} · {histLow.date}</div>}
+                                {comp&&!comp.isLowest&&<div style={{fontSize:11,color:'#888',marginTop:2,fontFamily:ff}}>Cheaper: {comp.cheapestLabel} at {currSymbol}{comp.minNorm.toFixed(1)} {headline.normLabel}</div>}
+                                {comp?.isLowest&&<div style={{fontSize:11,color:'#1e7e34',marginTop:2,fontFamily:ff}}>Best price among stores</div>}
+
+                                {/* Summary table */}
+                                {summaryRows.length>0&&(
+                                  <div onClick={()=>navigateToDetail(gk)} style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer'}}>
+                                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:ff,tableLayout:'fixed'}}>
+                                      <colgroup><col style={{width:'28%'}}/><col style={{width:'42%'}}/><col style={{width:'30%'}}/></colgroup>
+                                      <tbody>
+                                        {summaryRows.map(e=>{
+                                          const eDn=dispNormOf(e);
+                                          const isLow=isHistoricalLowEntry(e,gEntries);
+                                          return (
+                                            <tr key={e.id} style={{background:isLow?'#edfbf3':'transparent'}}>
+                                              <td style={{padding:'4px 6px 4px 0',color:'#666',whiteSpace:'nowrap',overflow:'hidden'}}>
+                                                {e.date}{e.purchased&&<span style={{marginLeft:4,display:'inline-flex',verticalAlign:'middle'}}><BagIcon size={11} color='#aaa'/></span>}
+                                              </td>
+                                              <td style={{padding:'4px 6px',color:'#aaa',fontSize:11,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.note||''}</td>
+                                              <td style={{padding:'4px 0 4px 6px',textAlign:'right',color:'#1a73e8',fontWeight:500,whiteSpace:'nowrap',overflow:'hidden'}}>{eDn!=null?currSymbol+eDn+' '+(e.normLabel||''):'—'}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                    {moreCount>0&&<div style={{fontSize:11,color:'#888',marginTop:4,textAlign:'right',fontFamily:ff,textDecoration:'underline',cursor:'pointer'}}>and {moreCount} more...</div>}
+                                  </div>
+                                )}
+
+                                {/* Single record — See detail */}
+                                {gEntries.length===1&&(
+                                  <div onClick={()=>navigateToDetail(gk)} style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer',textAlign:'right'}}>
+                                    <span style={{fontSize:11,color:'#888',fontFamily:ff,textDecoration:'underline'}}>See detail...</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -995,6 +1060,10 @@ export default function App() {
 
         return (
           <div style={{paddingBottom:80}}>
+            {/* Minimal header */}
+            <div style={{textAlign:'center',marginBottom:14}}>
+              <span style={{fontSize:13,color:'#444441',fontFamily:ff}}>TruPrice</span>
+            </div>
             {/* Unified header: item name + store/brand + intelligence summary — fully tappable → viz */}
             <div
               onClick={()=>navigateToViz(headline.name)}
