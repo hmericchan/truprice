@@ -1,4 +1,4 @@
-// TruPrice v2.0j
+// TruPrice v2.0k
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -475,18 +475,18 @@ export default function App() {
     if(myDispNorm==null) return null;
     const myUnitType=UNIT_TYPE[myUnit];
     const sameItem=entries.filter(e=>e.name===itemName&&!e.purchased&&e.normalized&&UNIT_TYPE[e.unit]===myUnitType);
-    const brandStoreKeys=[...new Set(sameItem.map(e=>(e.brand||'')+'|||'+(e.store||'')))];
-    if(brandStoreKeys.length<=1) return null;
-    const latestPerBrandStore={};
+    // latest record per brand+store group
+    const latestPerGroup={};
     sameItem.forEach(e=>{
-      const k=(e.brand||'')+'|||'+(e.store||'');
-      if(!latestPerBrandStore[k]||e.date>latestPerBrandStore[k].date) latestPerBrandStore[k]=e;
+      const k=groupKey(e);
+      if(!latestPerGroup[k]||e.date>latestPerGroup[k].date) latestPerGroup[k]=e;
     });
-    const all=Object.values(latestPerBrandStore).map(e=>({ ...e,dn:parseFloat(toDisplay(toHKD(e.normalized,e.currency||'HKD')).toFixed(1)) }));
+    const all=Object.values(latestPerGroup).map(e=>({ ...e,dn:parseFloat(toDisplay(toHKD(e.normalized,e.currency||'HKD')).toFixed(1)) }));
+    if(all.length<=1) return null;
     const minNorm=Math.min(...all.map(e=>e.dn));
     const isLowest=Math.abs(myDispNorm-minNorm)<0.05;
     const cheapest=all.find(e=>Math.abs(e.dn-minNorm)<0.05);
-    return { isLowest,cheapestLabel:(cheapest?.brand||'')+(cheapest?.store?' @ '+cheapest.store:''),minNorm,cheapestGk:cheapest?groupKey(cheapest):null };
+    return { isLowest,cheapestLabel:(cheapest?.brand?cheapest.brand+' @ ':'')+( cheapest?.store||''),minNorm,cheapestGk:cheapest?groupKey(cheapest):null };
   }
 
   function getHeadlineEntry(gEntries) {
@@ -1105,6 +1105,20 @@ export default function App() {
                 <UserIcon/>
               </button>
             </div>
+            {showPersonalization&&(
+              <div style={{background:'#f9f9f9',border:'1px solid #eee',borderRadius:12,padding:'1rem',marginBottom:14}}>
+                <p style={{fontSize:13,fontWeight:500,color:'#444441',margin:'0 0 8px',fontFamily:ff}}>Personalization</p>
+                <p style={{fontSize:12,color:'#666',margin:'0 0 8px',fontFamily:ff}}>Select 3 currencies for quick switch:</p>
+                <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+                  {ALL_CURRENCIES.map(c=>{ const sel=selectedCurrencies.includes(c); return <button key={c} onClick={()=>toggleCurrencySelection(c)} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:sel?'1px solid #444441':'1px solid #aaa',background:sel?'#444441':'transparent',color:sel?'#fff':'#666',fontFamily:ff}}>{c}</button>; })}
+                </div>
+                <p style={{fontSize:12,color:'#666',margin:'0 0 6px',fontFamily:ff}}>Default display currency:</p>
+                <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                  {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:displayCurrency===c?'1px solid #444441':'1px solid #aaa',background:displayCurrency===c?'#444441':'transparent',color:displayCurrency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
+                </div>
+                <p style={{fontSize:11,color:'#aaa',marginTop:12,marginBottom:0,fontFamily:ff}}>More personalization options coming soon.</p>
+              </div>
+            )}
             {/* Unified header: item name + store/brand + intelligence summary — fully tappable → viz */}
             <div
               onClick={()=>navigateToViz(headline.name)}
@@ -1218,6 +1232,20 @@ export default function App() {
               <UserIcon/>
             </button>
           </div>
+          {showPersonalization&&(
+            <div style={{background:'#f9f9f9',border:'1px solid #eee',borderRadius:12,padding:'1rem',marginBottom:14}}>
+              <p style={{fontSize:13,fontWeight:500,color:'#444441',margin:'0 0 8px',fontFamily:ff}}>Personalization</p>
+              <p style={{fontSize:12,color:'#666',margin:'0 0 8px',fontFamily:ff}}>Select 3 currencies for quick switch:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+                {ALL_CURRENCIES.map(c=>{ const sel=selectedCurrencies.includes(c); return <button key={c} onClick={()=>toggleCurrencySelection(c)} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:sel?'1px solid #444441':'1px solid #aaa',background:sel?'#444441':'transparent',color:sel?'#fff':'#666',fontFamily:ff}}>{c}</button>; })}
+              </div>
+              <p style={{fontSize:12,color:'#666',margin:'0 0 6px',fontFamily:ff}}>Default display currency:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {selectedCurrencies.map(c=>(<button key={c} onClick={()=>updatePrefs({ displayCurrency:c })} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:displayCurrency===c?'1px solid #444441':'1px solid #aaa',background:displayCurrency===c?'#444441':'transparent',color:displayCurrency===c?'#fff':'#666',fontFamily:ff}}>{c}</button>))}
+              </div>
+              <p style={{fontSize:11,color:'#aaa',marginTop:12,marginBottom:0,fontFamily:ff}}>More personalization options coming soon.</p>
+            </div>
+          )}
 
           <div style={{marginBottom:12}}>
             <div style={{fontWeight:600,fontSize:16,fontFamily:ff,marginBottom:4}}>{vizItemName}</div>
