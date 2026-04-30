@@ -1,4 +1,4 @@
-// TruPrice v2.0k
+// TruPrice v2.1
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts';
 
@@ -18,18 +18,26 @@ const ALL_CURRENCIES = ['CAD','CNY','EUR','GBP','HKD','JPY','SGD','USD'];
 const CURRENCY_SYMBOLS = { CAD:'CA$',CNY:'CN¥',EUR:'€',GBP:'£',HKD:'HK$',JPY:'JP¥',SGD:'SG$',USD:'US$' };
 const DEFAULT_SELECTED = ['HKD','USD','CAD'];
 const PRESET_TAGS = [
-  'Meat & Poultry','Seafood','Vegetables','Fruits','Tofu & Eggs',
-  'Dry Goods','Canned & Bottled','Rice & Grains','Noodles & Pasta','Snacks',
-  'Chinese Herbs','Health Foods','Supplements',
-  'Condiments & Sauces','Beverages','Dairy','Frozen','Cleaning & Personal Care',
-  'Alcohols','Baking','Chinese Pastries','Frozen Dessert','Soup Ingredients','家品',
+  'Meat & Poultry','Seafood','Vegetables & Fruits','Tofu & Eggs',
+  'Rice & Grains','Noodles & Pasta','Snacks','Chinese Pastries',
+  'Bakery & Bread','Dessert','Beverages',
+  'Baking & Cooking Ingredients','Condiments & Sauces','Soup Ingredients',
+  'Frozen & Ready-to-eat','Dairy',
+  'Chinese Herbs','Health Foods','Supplements','Medicine',
+  'Alcohols','Beer','Wine',
+  'Household Detergent','Laundry Care','Personal Care','Household',
 ];
 
 const SECTION_MAP = [
-  { name:'Food', color:'#4CAF50', categories:['Meat & Poultry','Seafood','Vegetables','Fruits','Tofu & Eggs','Dairy','Frozen','Frozen Dessert','Snacks','Chinese Pastries','Beverages','Rice & Grains','Noodles & Pasta','Dry Goods','Canned & Bottled','Condiments & Sauces','Baking','Soup Ingredients','Chinese Herbs'] },
-  { name:'Alcohol', color:'#FF8F00', categories:['Alcohols'] },
-  { name:'Medicine & Supplements', color:'#1a73e8', categories:['Health Foods','Supplements'] },
-  { name:'Household', color:'#7F77DD', categories:['Cleaning & Personal Care','家品'] },
+  { name:'Food', color:'#4CAF50', categories:[
+    'Bakery & Bread','Baking & Cooking Ingredients','Beverages','Chinese Pastries',
+    'Condiments & Sauces','Dairy','Dessert','Frozen & Ready-to-eat',
+    'Meat & Poultry','Noodles & Pasta','Rice & Grains','Seafood',
+    'Snacks','Soup Ingredients','Tofu & Eggs','Vegetables & Fruits',
+  ]},
+  { name:'Alcohol', color:'#FF8F00', categories:['Alcohols','Beer','Wine'] },
+  { name:'Health Products', color:'#1a73e8', categories:['Chinese Herbs','Health Foods','Medicine','Supplements'] },
+  { name:'Household Supplies', color:'#7F77DD', categories:['Household','Household Detergent','Laundry Care','Personal Care'] },
 ];
 const SECTION_OTHER = { name:'Other', color:'#888' };
 
@@ -451,11 +459,14 @@ export default function App() {
       normalized:norm?norm.normalized:null,normLabel:norm?norm.label:null,
     };
     if(editId){
+      const oldEntry=entries.find(e=>e.id===editId);
+      const oldGk=oldEntry?groupKey(oldEntry):null;
+      const newGk=groupKey(entryData);
       setEntries(prev=>prev.map(e=>e.id===editId?{...entryData,id:editId}:e));
       showToast('Record updated!');
       setEditId(null);
-      if(editFromDetail){ setView('detail'); setEditFromDetail(false); }
-      else { setView('record'); }
+      if(editFromDetail&&oldGk&&newGk===oldGk){ setView('detail'); setEditFromDetail(false); }
+      else { setView('record'); setDetailKey(null); setEditFromDetail(false); }
     } else {
       setEntries(prev=>[{...entryData,id:Date.now()},...prev]);
       showToast('Entry saved!');
@@ -471,9 +482,10 @@ export default function App() {
     else { setView('record'); }
   }
 
-  function competitionInfo(itemName, myDispNorm, myUnit) {
+  function competitionInfo(itemName, myDispNorm, myUnit, myGk) {
     if(myDispNorm==null) return null;
     const myUnitType=UNIT_TYPE[myUnit];
+    // get all entries for same item name + matching unit type, excluding purchased
     const sameItem=entries.filter(e=>e.name===itemName&&!e.purchased&&e.normalized&&UNIT_TYPE[e.unit]===myUnitType);
     // latest record per brand+store group
     const latestPerGroup={};
@@ -481,12 +493,20 @@ export default function App() {
       const k=groupKey(e);
       if(!latestPerGroup[k]||e.date>latestPerGroup[k].date) latestPerGroup[k]=e;
     });
-    const all=Object.values(latestPerGroup).map(e=>({ ...e,dn:parseFloat(toDisplay(toHKD(e.normalized,e.currency||'HKD')).toFixed(1)) }));
-    if(all.length<=1) return null;
-    const minNorm=Math.min(...all.map(e=>e.dn));
-    const isLowest=Math.abs(myDispNorm-minNorm)<0.05;
-    const cheapest=all.find(e=>Math.abs(e.dn-minNorm)<0.05);
-    return { isLowest,cheapestLabel:(cheapest?.brand?cheapest.brand+' @ ':'')+( cheapest?.store||''),minNorm,cheapestGk:cheapest?groupKey(cheapest):null };
+    const allGroups=Object.values(latestPerGroup);
+    if(allGroups.length<=1) return null;
+    // find global cheapest
+    const withDn=allGroups.map(e=>({ e, dn:parseFloat(toDisplay(toHKD(e.normalized,e.currency||'HKD')).toFixed(1)) }));
+    const minDn=Math.min(...withDn.map(x=>x.dn));
+    const cheapestEntry=withDn.find(x=>Math.abs(x.dn-minDn)<0.05)?.e;
+    const cheapestGk=cheapestEntry?groupKey(cheapestEntry):null;
+    const isLowest=cheapestGk===myGk;
+    return {
+      isLowest,
+      cheapestLabel:(cheapestEntry?.brand?cheapestEntry.brand+' @ ':'')+( cheapestEntry?.store||''),
+      minNorm:minDn,
+      cheapestGk
+    };
   }
 
   function getHeadlineEntry(gEntries) {
@@ -733,7 +753,7 @@ export default function App() {
             <button onClick={()=>setShowPersonalization(p=>!p)} style={{position:'absolute',right:0,top:0,background:'none',border:'none',cursor:'pointer',color:showPersonalization?'#444441':'#aaa',padding:4}}>
               <UserIcon/>
             </button>
-            <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v2.0</span>
+            <span style={{position:'absolute',left:0,bottom:-12,fontSize:10,color:'#ccc',fontFamily:ff}}>v2.1</span>
           </div>
 
           {/* Personalization */}
@@ -783,9 +803,15 @@ export default function App() {
             </select>
             {grouped.length>0&&<span style={{fontSize:12,color:'#888',whiteSpace:'nowrap',fontFamily:ff}}>{grouped.length}</span>}
           </div>
-          <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginBottom:14}}>
-            <button onClick={handleExport} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}>Export</button>
-            <label style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}>Import<input type='file' accept='.json' style={{display:'none'}} onChange={handleImport}/></label>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:14}}>
+            <button
+              onClick={()=>setExpandedCategories({})}
+              style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}
+            >Collapse all</button>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={handleExport} style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}>Export</button>
+              <label style={{padding:'6px 14px',fontSize:13,cursor:'pointer',borderRadius:8,border:'1px solid #aaa',background:'transparent',color:'#666',fontFamily:ff}}>Import<input type='file' accept='.json' style={{display:'none'}} onChange={handleImport}/></label>
+            </div>
           </div>
 
           {grouped.length===0&&<p style={{color:'#888',fontSize:14,fontFamily:ff}}>No entries yet. Tap + to add your first item.</p>}
@@ -836,7 +862,7 @@ export default function App() {
                             const headlineSymbol=CURRENCY_SYMBOLS[headlineCurr]||headlineCurr;
                             const headlineDispPrice=parseFloat(convertPrice(headline.price,headlineCurr).toFixed(2));
                             const histLow=getHistoricalLow(gEntries,headlineDispNorm);
-                            const comp=competitionInfo(latest.name,headlineDispNorm,headline.unit);
+                            const comp=competitionInfo(latest.name,headlineDispNorm,headline.unit,gk);
                             const summaryRows=gEntries.slice(1,3);
                             const moreCount=gEntries.length>3?gEntries.length-3:0;
 
@@ -890,14 +916,14 @@ export default function App() {
                                         })}
                                       </tbody>
                                     </table>
-                                    {moreCount>0&&<div style={{fontSize:11,color:'#888',marginTop:4,textAlign:'right',fontFamily:ff,textDecoration:'underline',cursor:'pointer'}}>and {moreCount} more...</div>}
+                                    {moreCount>0&&<div onClick={()=>navigateToDetail(gk)} style={{fontSize:11,color:'#888',marginTop:4,textAlign:'right',fontFamily:ff,textDecoration:'underline',cursor:'pointer'}}>and {moreCount} more...</div>}
                                   </div>
                                 )}
 
-                                {/* Single record — See detail */}
+                                {/* Single record — Price History */}
                                 {gEntries.length===1&&(
                                   <div onClick={()=>navigateToDetail(gk)} style={{marginTop:8,borderTop:'1px solid #f0f0f0',paddingTop:8,cursor:'pointer',textAlign:'right'}}>
-                                    <span style={{fontSize:11,color:'#888',fontFamily:ff,textDecoration:'underline'}}>See detail...</span>
+                                    <span style={{fontSize:11,color:'#888',fontFamily:ff,textDecoration:'underline'}}>Price History...</span>
                                   </div>
                                 )}
                                 </div>
@@ -963,23 +989,23 @@ export default function App() {
             </p>
             <p style={{fontSize:11,color:'#aaa',marginBottom:12,marginTop:0,fontFamily:ff}}>Fields marked * are required</p>
 
-            {/* Item name */}
-            <div style={{marginBottom:12}}>
-              {lbl('Item name',true)}
-              <AutocompleteInput value={form.name} onChange={v=>setF('name',v)} suggestions={itemNames} placeholder='Type or select a previous item' style={inp}/>
-            </div>
+            {/* Item name + Brand on same row */}
+            {field(<>
+              <div>{lbl('Item name',true)}<AutocompleteInput value={form.name} onChange={v=>setF('name',v)} suggestions={itemNames} placeholder='Type or select a previous item' style={inp}/></div>
+              <div>{lbl('Brand')}<AutocompleteInput value={form.brand} onChange={v=>setF('brand',v)} suggestions={brandNames} placeholder='e.g. Quaker' style={inp}/></div>
+            </>,'1fr 1fr')}
 
-            {/* Category */}
+            {/* Category full width */}
             <div style={{marginBottom:12}}>
               {lbl('Category')}
               <AutocompleteInput value={form.tag} onChange={v=>setF('tag',v)} suggestions={userTags} placeholder='e.g. Fruits' style={inp}/>
             </div>
 
-            {/* Brand + Store */}
-            {field(<>
-              <div>{lbl('Brand')}<AutocompleteInput value={form.brand} onChange={v=>setF('brand',v)} suggestions={brandNames} placeholder='e.g. Quaker' style={inp}/></div>
-              <div>{lbl('Store')}<AutocompleteInput value={form.store} onChange={v=>setF('store',v)} suggestions={storeNames} placeholder='e.g. Walmart' style={inp}/></div>
-            </>,'1fr 1fr')}
+            {/* Store full width */}
+            <div style={{marginBottom:12}}>
+              {lbl('Store')}
+              <AutocompleteInput value={form.store} onChange={v=>setF('store',v)} suggestions={storeNames} placeholder='e.g. Walmart' style={inp}/>
+            </div>
 
             {/* Price date + Purchased on same row */}
             <div style={{display:'flex',gap:20,marginBottom:12,alignItems:'flex-end'}}>
